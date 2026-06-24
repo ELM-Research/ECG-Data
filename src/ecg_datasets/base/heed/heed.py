@@ -9,7 +9,8 @@ from configs.constants import DATA_DIR, PTB_ORDER
 class HEED(BaseDataset):
     def __init__(self, args, logger):
         super().__init__(args, logger)
-        self.group_dirs = sorted(glob.glob(f"{DATA_DIR}/HEED/I*"))
+        self.data_root = f"{DATA_DIR}/{self.args.base}"
+        self.group_dirs = sorted(glob.glob(f"{self.data_root}/I*"))
         diagnoses_dic = pd.read_csv(f"{self.group_dirs[0]}/12SL_diagnoses/diagnoses_dictionary.csv")
         self.code_to_diagnosis = dict(zip(diagnoses_dic["codes"], diagnoses_dic["diagnoses"]))
 
@@ -27,7 +28,7 @@ class HEED(BaseDataset):
         return [self.code_to_diagnosis[int(c)] for c in str(codes).split(",") if int(c) in self.code_to_diagnosis]
 
     def open_ecg(self, row,):
-        file_path = f"{DATA_DIR}/HEED/{row['path']}"
+        file_path = f"{self.data_root}/{row['path']}"
         ecg, sf = self.open_wfdb(file_path)
         return {"file_path": file_path, "ecg" : ecg,
                 "sf" : sf, "file_name" : "_".join(row["path"].split("/")),
