@@ -5,7 +5,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=0, help="Random Seed")
     parser.add_argument("--dev", action="store_true", default=None, help="Development mode")
     parser.add_argument("--base", type=str, default=None, 
-                        choices=["mimic_iv", "ptb_xl", "code15", "cpsc", "csn", "batch9", "batch10", "echonext", "heed"],
+                        choices=["mimic_iv", "ptb_xl", "code15", "cpsc", "csn", "echonext", "heed"],
                         help="Base dataset to preprocess")
     parser.add_argument("--map", type=str, default=None,
                         choices=["pretrain_mimic", "ecg_grounding", "ecg_qa_mimic_iv",
@@ -24,11 +24,5 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--train_ecg_byte", action = "store_true", default = None, help = "Train ECG Byte BPE algorithm")
     parser.add_argument("--ecg_tokenizer", type = str, default = None, help = "path to ECG Tokenizer")
     parser.add_argument("--num_merges", type = int, default = None, help = "Number of merges for BPE")
-    parser.add_argument(
-            "--batch_labels",
-             action = "store_true",
-            default=None,
-            help="To return all labels for batch.",
-        )
     parser.add_argument("--ecg_byte_token_dist", action = "store_true", default = None, help = "Analyze the average token length distribution for ECG Byte")
     return parser.parse_args()
