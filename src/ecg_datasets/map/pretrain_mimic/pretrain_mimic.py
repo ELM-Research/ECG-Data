@@ -5,8 +5,8 @@ from configs.constants import DATA_DIR
 from utils.file_dir import open_json
 
 class PretrainMIMIC(MapDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
         self.data_name = "mimic_iv"
         self.saved_dir = f"{DATA_DIR}/{self.data_name}/preprocessed_{self.args.segment_len}"
         self.save_dir_json = f"src/ecg_datasets/map/{self.args.map}/{self.args.map}_hf.json"

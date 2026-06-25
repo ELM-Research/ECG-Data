@@ -8,8 +8,8 @@ from configs.constants import DATA_DIR
 from ecg_datasets.base.base_dataset import BaseDataset
 
 class PTB_XL(BaseDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
 
     def prepare_df(self,):
         ptbxl_database = pd.read_csv(f"{DATA_DIR}/{self.args.base}/ptbxl_database.csv", index_col="ecg_id")

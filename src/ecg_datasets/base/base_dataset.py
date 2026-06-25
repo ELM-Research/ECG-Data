@@ -10,29 +10,28 @@ from utils.file_dir import ensure_directory_exists
 from configs.constants import DATA_DIR
 
 class BaseDataset:
-    def __init__(self, args, logger):
+    def __init__(self, args):
         self.args = args
-        self.logger = logger
         self.save_dir = f"{DATA_DIR}/{self.args.base}/preprocessed_{self.args.segment_len}"
         ensure_directory_exists(folder = self.save_dir)
 
     def get_df(self,):
-        self.logger.info("Getting dataframe...")
+        print("Getting dataframe...")
         df = pd.read_csv(f"{DATA_DIR}/{self.args.base}/{self.args.base}.csv")
-        self.logger.info("Dataframe retrieved.")
-        self.logger.info("Cleaning dataframe...")
+        print("Dataframe retrieved.")
+        print("Cleaning dataframe...")
         df = self.clean_dataframe(df)
-        self.logger.info("Dataframe cleaned.")
+        print("Dataframe cleaned.")
         if self.args.dev:
-            self.logger.info("Dev mode is on. Reducing dataframe size to 1000 instances...")
+            print("Dev mode is on. Reducing dataframe size to 1000 instances...")
             df = df.iloc[:1000]
         if self.args.toy:
-            self.logger.info(f"Toy mode is on. Reducing dataframe size to {self.args.toy} of original size...")
+            print(f"Toy mode is on. Reducing dataframe size to {self.args.toy} of original size...")
             df = df.sample(frac=self.args.toy, random_state=42).reset_index(drop=True)
-        self.logger.info("Dataframe retrieved and cleaned.")
-        self.logger.info(df.head())
-        self.logger.info(f"Number of instances in dataframe: {len(df)}")
-        self.logger.info("Dataframe prepared.")
+        print("Dataframe retrieved and cleaned.")
+        print(df.head())
+        print(f"Number of instances in dataframe: {len(df)}")
+        print("Dataframe prepared.")
         return df
     
     def clean_dataframe(self, df: "pd.DataFrame") -> Tuple["pd.DataFrame", bool, int]:
@@ -41,10 +40,10 @@ class BaseDataset:
             rows_before = len(df)
             cleaned_df = df.dropna()
             dropped_rows = rows_before - len(cleaned_df)
-            self.logger.info(f"Found and removed {dropped_rows} rows containing NaN values")
-            self.logger.info(f"Remaining rows: {len(cleaned_df)}")
+            print(f"Found and removed {dropped_rows} rows containing NaN values")
+            print(f"Remaining rows: {len(cleaned_df)}")
             return cleaned_df
-        self.logger.info("No NaN values found in DataFrame")
+        print("No NaN values found in DataFrame")
         return df
 
     def create_dataset(self, df):
@@ -109,7 +108,7 @@ class BaseDataset:
         
     def open_wfdb(self, path: Union[str, Path]):
         signal, fields = wfdb.rdsamp(path)
-        self.logger.info(f"fields: {fields}")
+        print(f"fields: {fields}")
         return signal, fields["fs"]
     
     def nsample_ecg(self, ecg, orig_fs, target_fs):

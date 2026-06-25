@@ -6,8 +6,8 @@ from utils.file_dir import open_json
 from configs.constants import DATA_DIR
 
 class ECGQA(MapDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
         if "mimic_iv" in self.args.map:
             self.data_name ="mimic_iv"
         elif "ptb_xl" in self.args.map:

@@ -9,8 +9,8 @@ from utils.file_dir import ensure_directory_exists, open_json, save_json
 from configs.constants import DATA_DIR
 
 class ECGBenchPulse(MapDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
         self.data_name = ["mimic_iv", "code15", "ptb_xl", "csn", "cpsc"]
         self.save_dir_json = f"src/ecg_datasets/map/{self.args.map}/{self.args.map}_hf.json"
 

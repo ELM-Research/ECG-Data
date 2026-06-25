@@ -7,8 +7,8 @@ from ecg_datasets.base.base_dataset import BaseDataset
 from configs.constants import DATA_DIR, PTB_ORDER
 
 class HEED(BaseDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
         self.group_dirs = sorted(glob.glob(f"{DATA_DIR}/HEED/I*"))
         diagnoses_dic = pd.read_csv(f"{self.group_dirs[0]}/12SL_diagnoses/diagnoses_dictionary.csv")
         self.code_to_diagnosis = dict(zip(diagnoses_dic["codes"], diagnoses_dic["diagnoses"]))

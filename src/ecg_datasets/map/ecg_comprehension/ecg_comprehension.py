@@ -11,8 +11,8 @@ from configs.constants import DATA_DIR
 from utils.file_dir import ensure_directory_exists, open_npy
 
 class ECGComprehension(SyntheticDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
         self.data_name = "mimic_iv"
         self.saved_dir = glob.glob(f"{DATA_DIR}/{self.data_name}/preprocessed_{self.args.segment_len}/*.npy")
         if self.args.input_type:

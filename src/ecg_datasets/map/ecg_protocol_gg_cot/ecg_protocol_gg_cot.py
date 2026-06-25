@@ -10,8 +10,8 @@ from utils.file_dir import ensure_directory_exists, open_json, save_json
 SPLIT = "test"
 
 class ECGProtocolGGCot(MapDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
         if SPLIT == "train":
             self.data_name = ["mimic_iv", "code15", "ptb_xl"]
         else:

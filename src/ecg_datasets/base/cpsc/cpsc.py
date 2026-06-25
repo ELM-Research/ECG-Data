@@ -10,8 +10,8 @@ from configs.constants import DATA_DIR
 from ecg_datasets.base.base_dataset import BaseDataset
 
 class CPSC(BaseDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
     
     def prepare_df(self, ):
         hf_dataset = load_dataset("PULSE-ECG/ECGBench", name="cpsc-test", streaming=False, cache_dir="./../.huggingface")

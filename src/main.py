@@ -8,25 +8,21 @@ from ecg_tokenizer.build_ecg_tokenizer import BuildECGByte
 from configs.configs import get_args
 
 from utils.set_seed import set_seed
-from utils.set_logging import get_logger
 
 def main(args: Namespace):
-    logger = get_logger()
-    logger.info(f"Current session arguments:\n{args}")
     set_seed(args.seed)
     
     if args.base:
-        build_base_dataset(args, logger)
+        build_base_dataset(args)
 
     if args.map:
-        build_map_dataset(args, logger)
+        build_map_dataset(args)
 
     if args.train_ecg_byte:
         ecg_byte_builder = BuildECGByte(args)
         if args.num_merges:
             ecg_byte_builder.train_ecg_byte()
 
-    logger.info("--------------------------FINISHED--------------------------")
 
 if __name__ == "__main__":
     main(get_args())

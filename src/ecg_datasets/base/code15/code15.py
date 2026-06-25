@@ -6,8 +6,8 @@ from configs.constants import DATA_DIR, PTB_ORDER
 from ecg_datasets.base.base_dataset import BaseDataset
 
 class CODE15(BaseDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
     
     def prepare_df(self, ):
         exam_mapping = self.build_code15_h5py()

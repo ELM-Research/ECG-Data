@@ -10,8 +10,8 @@ SPLIT = "train"  # test
 
 
 class ECGQACot(MapDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
         self.saved_dir = f"{DATA_DIR}/ptb_xl/preprocessed_{self.args.segment_len}"
         self.save_dir_json = f"src/ecg_datasets/map/ecg_qa_cot/{self.args.map}_{SPLIT}_hf.json"
         self.setup_ecg_qa()

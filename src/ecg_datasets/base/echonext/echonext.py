@@ -21,19 +21,19 @@ LABEL_TO_STATEMENT = {
 }
 
 class EchoNext(BaseDataset):
-    def __init__(self, args, logger):
-        super().__init__(args, logger)
+    def __init__(self, args):
+        super().__init__(args)
         self.root_dir = f"{DATA_DIR}/{args.base}/1.1.1"
 
     def prepare_df(self):
-        self.logger.info("Preparing DF")
+        print("Preparing DF")
         metadata = pd.read_csv(f"{self.root_dir}/EchoNext_metadata_100k.csv")
         # Waveforms are stored per split in EchoNext_<split>_waveforms.npy with row
         # order matching the metadata; split_idx is each record's row in that array.
         metadata["split_idx"] = metadata.groupby("split").cumcount()
         df = metadata[["split", "split_idx", *LABEL_TO_STATEMENT]]
         df.to_csv(f"{DATA_DIR}/{self.args.base}/{self.args.base}.csv", index=False)
-        self.logger.info(f"Prepared {len(df)} records: {metadata['split'].value_counts().to_dict()}")
+        print(f"Prepared {len(df)} records: {metadata['split'].value_counts().to_dict()}")
 
     def open_ecg(self, row):
         split, idx = row["split"], row["split_idx"]

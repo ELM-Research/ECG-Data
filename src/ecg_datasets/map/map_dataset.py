@@ -3,9 +3,8 @@ from tqdm import tqdm
 from utils.file_dir import save_json
 
 class MapDataset:
-    def __init__(self, args, logger):
+    def __init__(self, args):
         self.args = args
-        self.logger = logger
         self.available_ecgs = set()
         self.valid_instances = []
 
@@ -31,9 +30,8 @@ class MapDataset:
 
 
 class SyntheticDataset:
-    def __init__(self, args, logger):
+    def __init__(self, args):
         self.args = args
-        self.logger = logger
         self.valid_instances = []
 
     def map_data(self,):
