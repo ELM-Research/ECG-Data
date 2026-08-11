@@ -3,7 +3,7 @@ from transformers import pipeline
 import torch
 from tqdm import tqdm
 
-from configs.constants import DATA_DIR
+from configs.constants import DATA_DIR, PTB_ORDER
 
 from ecg_datasets.base.base_dataset import BaseDataset
 
@@ -45,3 +45,9 @@ class PTB_XL(BaseDataset):
         return {"file_path": file_path, "ecg" : ecg, 
                 "sf" : sf, "file_name" : "_".join(row_path.split("/")),
                 "report": report}
+
+    def reorder_indices(self, ecg):
+        current_order = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
+        order_mapping = {lead: index for index, lead in enumerate(current_order)}
+        new_indices = [order_mapping[lead] for lead in PTB_ORDER]
+        return ecg[:, new_indices]
