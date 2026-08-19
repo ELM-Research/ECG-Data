@@ -11,9 +11,11 @@ from huggingface_hub import login
 
 
 class Splitter:
+    _MIMIC_EXTRACTOR = lambda p: max(re.findall(r"p\d+", p), key=len, default=None)
+    _PTB_EXTRACTOR = lambda p: (m := re.search(r"_([0-9]+)_hr", p)) and m.group(1)
     _PATIENT_EXTRACTORS = {
-        "mimic": lambda p: max(re.findall(r"p\d+", p), key=len, default=None),
-        "ptb": lambda p: (m := re.search(r"_([0-9]+)_hr", p)) and m.group(1),
+        "mimic": _MIMIC_EXTRACTOR, "mimic_iv": _MIMIC_EXTRACTOR,
+        "ptb": _PTB_EXTRACTOR, "ptb_xl": _PTB_EXTRACTOR,
     }
 
     @staticmethod
