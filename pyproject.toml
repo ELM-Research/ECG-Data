@@ -17,3 +17,8 @@ dependencies = [
     "transformers>=4.57.3",
     "wfdb>=4.3.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["elm", "elm.*"]
+namespaces = true
