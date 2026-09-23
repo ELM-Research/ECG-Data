@@ -20,5 +20,5 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["elm", "elm.*"]
+include = ["ecg_preprocess", "ecg_preprocess.*", "analysis", "analysis.*"]
 namespaces = true
