@@ -1,1 +1,0 @@
-from .ecg_protocol_gg_cot import ECGProtocolGGCot
