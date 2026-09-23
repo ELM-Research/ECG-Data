@@ -1,4 +1,5 @@
-# ECG Preprocessing
+# ECG Data
+Everything to do with ECG data. We unify the collection and preprocessing of different ECG datasets. The main application for this data is pretraining [ECG-specific neural networks](https://github.com/ELM-Research/ECG-Neural-Networks) or [ECG-Language Models](https://github.com/ELM-Research/ECG-Language-Models).
 
 ## Installation
 
