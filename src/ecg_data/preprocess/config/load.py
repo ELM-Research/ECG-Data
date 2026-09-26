@@ -32,7 +32,7 @@ def load_config(path: str | Path, stack: tuple[Path, ...] = ()) -> dict[str, Any
 
     return deep_merge(config, raw)
 
-def get_config() -> tuple[dict, str]:
+def get_config() -> dict:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
