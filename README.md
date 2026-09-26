@@ -9,6 +9,12 @@ We also do various data analysis available for anyone to try! Check out `src/ana
 
 2. To run just do `uv run $PATH_TO_FILE`. There are examples in `scripts/`
 
+### Adding New Datasets
+
+To add a dataset, create `<data>/<data>.py` with a class named `data.upper()`
+that inherits from `BaseDataset` or `MapDataset`. Include a corresponding `__init__.py` in
+the folder as well.
+
 ### Base Datasets
 
 We regard base datasets as datasets that are solely used for later mapping of external datasets. Note that `DATA_DIR` in `src/configs/constants.py` is the path to your `data` folder.
