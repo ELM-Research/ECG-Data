@@ -1,4 +1,4 @@
 defaults:
   - ./common.yaml
 
-data: code15
+data_name: code15

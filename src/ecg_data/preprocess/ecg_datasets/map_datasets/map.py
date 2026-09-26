@@ -1,4 +1,4 @@
-from ecg_data.preprocess.ecg_datasets._build import _build_dataset
+from ecg_data.preprocess.ecg_datasets.common import get_dataset_module
 
 
 class MapDataset:
@@ -7,4 +7,4 @@ class MapDataset:
 
 
 def build_map_dataset(cfg: dict):
-    return _build_dataset(cfg, __package__)
+    return get_dataset_module(cfg, __package__)

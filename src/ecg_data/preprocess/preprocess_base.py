@@ -5,4 +5,6 @@ if __name__ == "__main__":
     cfg = get_config()
     print(cfg)
     print(type(cfg))
-    build_base_dataset(cfg)
+    base_dataset = build_base_dataset(cfg)
+    print(base_dataset)
+    

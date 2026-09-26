@@ -15,5 +15,14 @@
 # --base src/preprocess/config/csn.yaml
 
 # # ## MIMIC-IV
+# uv run python src/ecg_data/preprocess/preprocess_base.py \
+# --config src/ecg_data/preprocess/config/mimic_iv_ecg.yaml
+
+# # ## AGH
 uv run python src/ecg_data/preprocess/preprocess_base.py \
---config src/ecg_data/preprocess/config/mimic_iv_ecg.yaml
+--config src/ecg_data/preprocess/config/agh.yaml
+
+
+# # ## HEEDB
+uv run python src/ecg_data/preprocess/preprocess_base.py \
+--config src/ecg_data/preprocess/config/heedb.yaml

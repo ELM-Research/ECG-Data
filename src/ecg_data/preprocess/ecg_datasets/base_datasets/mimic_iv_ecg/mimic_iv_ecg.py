@@ -1,5 +1,3 @@
-from ecg_data.preprocess.ecg_datasets.base_datasets.base import BaseDataset
-
-
-class MIMIC_IV_ECG(BaseDataset):
-    pass
+class MIMIC_IV_ECG:
+    def __init__(self, data_name: str, data_root_path: str):
+        pass

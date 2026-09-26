@@ -1,4 +1,4 @@
 defaults:
   - ./common.yaml
 
-data: csn
+data_name: csn

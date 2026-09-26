@@ -1,4 +1,4 @@
 defaults:
   - ./common.yaml
 
-data: cpsc
+data_name: cpsc

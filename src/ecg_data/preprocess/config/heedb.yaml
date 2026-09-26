@@ -1,0 +1,5 @@
+defaults:
+  - ./common.yaml
+
+data_name: heedb
+data_root_path: /p01/whan/data/HEED

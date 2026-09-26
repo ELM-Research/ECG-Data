@@ -1,4 +1,4 @@
 defaults:
   - ./common.yaml
 
-data: ptb_xl
+data_name: ptb_xl
