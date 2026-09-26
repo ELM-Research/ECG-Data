@@ -1,3 +1,5 @@
 .logs/
 target/
 Cargo.lock
+src/ecg_preprocess/ecg_datasets/base/agh
+src/ecg_preprocess/ecg_datasets/base/heedb
