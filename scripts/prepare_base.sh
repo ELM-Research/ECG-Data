@@ -15,5 +15,5 @@
 # --base src/ecg_preprocess/config/csn.yaml
 
 # # ## MIMIC-IV
-uv run python src/ecg_preprocess/preprocess_base.py \
---config src/ecg_preprocess/config/mimic_iv_ecg.yaml
+uv run python src/ecg_data/ecg_preprocess/preprocess_base.py \
+--config src/ecg_data/ecg_preprocess/config/mimic_iv_ecg.yaml
