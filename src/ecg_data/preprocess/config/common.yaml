@@ -2,5 +2,7 @@ seed: 0
 development: true
 toy_dataset_fraction: null
 
+save_path: /batch_data/heedb/preprocessed_250_10
+
 target_sf: 250
 segment_length: 10 # in seconds

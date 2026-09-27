@@ -13,6 +13,7 @@ class BaseDataset:
     def __init__(self, dataset_module,
                  target_sf : int = 250, # Hz
                  segment_length: int = 10, # Seconds
+                 save_path: str = None,
                  toy_dataset_fraction: float | None = None,
                  development: bool = False,):
         self.dataset_module = dataset_module
@@ -22,6 +23,8 @@ class BaseDataset:
         self.segment_length = segment_length
         self.toy_dataset_fraction = toy_dataset_fraction
         self.development = development
+        self.save_path = save_path
+        Path(self.save_path).mkdir(parents=True, exist_ok=True)
 
     def get_df(self,):
         if Path(f"{self.data_root_path}/preprocessed_{self.data_name}.csv").exists():
@@ -57,7 +60,7 @@ class BaseDataset:
 
     def create_dataset(self, df):
         if self.development:
-            for idx in range(len(df)):
+            for idx in tqdm(range(len(df)), desc = f"Development: {self.development}"):
                 self.iterate_dataset(df.iloc[idx])
             return
         from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -82,7 +85,6 @@ class BaseDataset:
         try:
             row_dict = row.to_dict()
             out = self.dataset_module.open_data(row_dict)
-            print(out)
             if out is None or any(
                 value is None
                 or (isinstance(value, (str, list)) and len(value) == 0)
@@ -97,8 +99,9 @@ class BaseDataset:
                 {**out, "ecg": segment, "sf": self.target_sf, "current_order": PTB_ORDER}
                 for segment in self.segment_ecg(ecg)
             ]
-            print(instances)
-            input()
+            for i in range(len(instances)):
+                np.save(f"{self.save_path}/{out['file_name']}_{i}.npy", instances[i])
+            return True
         except Exception as e:
             print(f"Error processing: {e!s}. Skipping this instance.")
             return None
@@ -124,12 +127,8 @@ class BaseDataset:
         return downsampled_data
 
     def segment_ecg(self, ecg):
-        # Keep complete, non-overlapping windows of the resampled signal.
-        samples = self.segment_length * self.target_sf
-        if samples <= 0 or not float(samples).is_integer():
-            raise ValueError("Segment duration must produce a positive whole sample count")
-        samples = int(samples)
-
+        # non-overlapping segments
+        samples = int(self.segment_length * self.target_sf)
         return [ecg[:, start:start + samples] for start in range(0, ecg.shape[1] - samples + 1, samples)]
 
 def build_base_dataset(cfg: dict):
@@ -138,5 +137,6 @@ def build_base_dataset(cfg: dict):
                                         __package__)
     return BaseDataset(dataset_module, target_sf = cfg["target_sf"],
                        segment_length=cfg["segment_length"],
+                       save_path=cfg["save_path"],
                        toy_dataset_fraction=cfg["toy_dataset_fraction"],
                        development=cfg["development"],)

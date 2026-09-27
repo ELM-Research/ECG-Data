@@ -13,7 +13,7 @@ class HEEDB:
 
     def open_data(self, row):
         ecg, fields = open_wfdb(row["path"])
-        ecg = ecg.T  # WFDB returns (time, lead); preprocessing uses (lead, time).
+        ecg = ecg.T  # WFDB returns (time, lead) --> (lead, time).
         reports_physician = self.map_codes(row["codes_physician"])
         reports_software_old = self.map_codes(row["codes_software_old"])
         reports_software_new = self.map_codes(row["codes_software_new"])
