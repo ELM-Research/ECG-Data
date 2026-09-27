@@ -4,9 +4,6 @@ from ecg_data.preprocess.ecg_datasets.base_datasets.base import build_base_datas
 if __name__ == "__main__":
     cfg = get_config()
     print(cfg)
-    print(type(cfg))
     base_dataset = build_base_dataset(cfg)
-    print(base_dataset)
-
     df = base_dataset.get_df()
     

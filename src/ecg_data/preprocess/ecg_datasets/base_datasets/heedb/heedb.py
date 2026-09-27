@@ -24,18 +24,23 @@ class HEEDB:
                 usecols=["FileName", "codes_physician", "codes_software"], dtype=str,
             ).rename(columns={"codes_software": "codes_software_old"})
 
-            # Match site-specific prefixes while preserving the acquisition path.
+            # Normalizing path name
             for df in [metadata, diagnoses_acquisition, diagnoses_v24]:
                 df.dropna(subset=["FileName"], inplace=True)
                 df["FileName"] = (
-                    df["FileName"].str.removeprefix("./").str.removeprefix("/").str.removeprefix("WFDB/")
+                    df["FileName"].str.removeprefix("./").str.removeprefix("/")
+                    .str.removeprefix("WFDB/").str.removesuffix(".hea\n")
                 )
 
+            # Inner merge csvs base on normalized FileName
             df = metadata.merge(diagnoses_acquisition, on="FileName", how="inner", validate="one_to_one")
             df = df.merge(diagnoses_v24, on="FileName", how="inner", validate="one_to_one")
             df["path"] = f"{group}/WFDB/" + df["FileName"]
-            print("LEN OF df", len(df[cols]))
-            input()
+            
+            headers = df["path"] + ".hea"
+            missing = headers[~headers.map(os.path.isfile)]
+            if not missing.empty:
+                raise FileNotFoundError(f"{len(missing)} missing")
             dfs.append(df[cols])
 
         df = pd.concat(dfs, ignore_index=True)
