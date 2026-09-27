@@ -16,7 +16,9 @@ class BaseDataset:
                  save_path: str = None,
                  toy_dataset_fraction: float | None = None,
                  development: bool = False,
-                 num_cores: int | None = None,):
+                 num_cores: int | None = None,
+                 records_per_part: int = 100000,):
+        self.records_per_part = records_per_part
         self.dataset_module = dataset_module
         self.data_root_path = self.dataset_module.data_root_path
         self.data_name = self.dataset_module.data_name
@@ -61,7 +63,7 @@ class BaseDataset:
         return df
 
     def create_dataset(self, df):
-        rows = (row for _, row in df.iterrows())
+        rows = enumerate(row for _, row in df.iterrows())
         if self.development:
             for row in tqdm(rows, total=len(df), desc = f"Development: {self.development}"):
                 self.iterate_dataset(row)
@@ -75,7 +77,8 @@ class BaseDataset:
                     skipped_count += 1
         print(f"Total instances skipped: {skipped_count}")
 
-    def iterate_dataset(self, row):
+    def iterate_dataset(self, item):
+        row_index, row = item
         try:
             row_dict = row.to_dict()
             out = self.dataset_module.open_data(row_dict)
@@ -93,8 +96,10 @@ class BaseDataset:
                 {**out, "ecg": segment, "sf": self.target_sf, "current_order": PTB_ORDER}
                 for segment in self.segment_ecg(ecg)
             ]
+            part = Path(self.save_path) / f"part_{row_index // self.records_per_part:06d}"
+            part.mkdir(parents=True, exist_ok=True)
             for i in range(len(instances)):
-                np.save(f"{self.save_path}/{out['file_name']}_{i}.npy", instances[i])
+                np.save(part / f"{out['file_name']}_{i}.npy", instances[i])
             return True
         except Exception as e:
             print(f"Error processing: {e!s}. Skipping this instance.")
@@ -126,4 +131,5 @@ def build_base_dataset(cfg: dict):
                        save_path=cfg["save_path"],
                        toy_dataset_fraction=cfg["toy_dataset_fraction"],
                        development=cfg["development"],
-                       num_cores=cfg["num_cores"],)
+                       num_cores=cfg["num_cores"],
+                       records_per_part=cfg["records_per_part"],)
