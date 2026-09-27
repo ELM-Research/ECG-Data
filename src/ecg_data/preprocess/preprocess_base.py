@@ -6,4 +6,4 @@ if __name__ == "__main__":
     print(cfg)
     base_dataset = build_base_dataset(cfg)
     df = base_dataset.get_df()
-    
+    base_dataset.create_dataset(df)

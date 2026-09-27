@@ -1,16 +1,35 @@
 import pandas as pd
 import glob
 import os
+from ecg_data.preprocess.ecg_datasets.common import open_wfdb
 
 class HEEDB:
-    def __init__(self, data_name: str, data_root_path: str):
+    def __init__(self, data_name: str, data_root_path: str,):
         self.data_name = data_name
         self.data_root_path = data_root_path
         # diagnoses_dictionary.csv in I0001 and I0006 are identical when only comparing codes and diagnoses columns
         diagnoses_dic = pd.read_csv(f"{self.data_root_path}/I0006/12SL_diagnoses/diagnoses_dictionary.csv")
+        self.code_to_diagnosis = dict(zip(diagnoses_dic["codes"], diagnoses_dic["diagnoses"]))
 
     def open_data(self, row):
-        pass
+        ecg, fields = open_wfdb(row["path"])
+        physician_report = self.map_codes(row["codes_physician"])
+        muse_report_old = self.map_codes(row["codes_software_old"])
+        muse_report_new = self.map_codes(row["codes_software_new"])
+        if any(not code_list for code_list in (physician_report, muse_report_old, muse_report_new)):
+            return None
+        return {"file_path": row["path"], "ecg" : ecg,
+                "sf" : fields["fs"], "file_name" : row["path"].replace("/", "_"),
+                "physician_report": physician_report,
+                "muse_report_old": muse_report_old,
+                "muse_report_new": muse_report_new,
+                "physician_code": row["codes_physician"],
+                "muse_code_old": row["codes_software_old"],
+                "muse_code_new": row["codes_software_new"],
+                "current_order": fields["sig_name"]}
+
+    def map_codes(self, codes):
+        return [self.code_to_diagnosis[int(c)] for c in str(codes).split(",") if int(c) in self.code_to_diagnosis]
 
     def prepare_df(self,):
         cols = ["path", "codes_physician", "codes_software_old", "codes_software_new"]

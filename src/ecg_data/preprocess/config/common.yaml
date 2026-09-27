@@ -1,3 +1,6 @@
 seed: 0
-developement: false
+development: true
 toy_dataset_fraction: null
+
+target_sf: 250
+segment_length: 10 # in seconds
