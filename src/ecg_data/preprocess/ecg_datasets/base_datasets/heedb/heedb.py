@@ -16,5 +16,11 @@ class HEEDB:
         groups = sorted(glob.glob(f"{self.data_root_path}/I*"))
         for group in groups:
             metadata = pd.read_csv(f"{group}/metadata/metadata.csv")
-            print(metadata.head()) 
-
+            print(metadata.head())
+            print(metadata.columns)
+            diagnoses_v24 = pd.read_csv(f"{group}/12SL_diagnoses/diagnoses_v24.csv")
+            print(diagnoses_v24.head())
+            print(diagnoses_v24.columns)
+            diagnoses_acquisition = pd.read_csv(f"{group}/12SL_diagnoses/diagnoses_acquisition.csv")
+            print(diagnoses_acquisition.head())
+            print(diagnoses_acquisition.columns)

@@ -2,7 +2,6 @@ import pandas as pd
 from pathlib import Path
 from ecg_data.preprocess.ecg_datasets.common import get_dataset_module
 
-
 class BaseDataset:
     def __init__(self, dataset_module,
                  toy_dataset_fraction: float | None = None,

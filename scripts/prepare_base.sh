@@ -19,8 +19,8 @@
 # --config src/ecg_data/preprocess/config/mimic_iv_ecg.yaml
 
 # # ## AGH
-uv run python src/ecg_data/preprocess/preprocess_base.py \
---config src/ecg_data/preprocess/config/agh.yaml
+# uv run python src/ecg_data/preprocess/preprocess_base.py \
+# --config src/ecg_data/preprocess/config/agh.yaml
 
 
 # # ## HEEDB
