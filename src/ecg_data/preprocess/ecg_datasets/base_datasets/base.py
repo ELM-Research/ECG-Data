@@ -10,8 +10,6 @@ from ecg_data.preprocess.ecg_datasets.common import get_dataset_module
 PTB_ORDER = ["I", "II", "III", "aVL", "aVR", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
 
 class BaseDataset:
-    """Preprocess ECG arrays shaped (lead, time)."""
-
     def __init__(self, dataset_module,
                  target_sf : int = 250, # Hz
                  segment_length: int = 10, # Seconds
@@ -128,4 +126,4 @@ def build_base_dataset(cfg: dict):
                        save_path=cfg["save_path"],
                        toy_dataset_fraction=cfg["toy_dataset_fraction"],
                        development=cfg["development"],
-                       num_cores=cfg.get("num_cores"),)
+                       num_cores=cfg["num_cores"],)
