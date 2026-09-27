@@ -13,19 +13,19 @@ class HEEDB:
 
     def open_data(self, row):
         ecg, fields = open_wfdb(row["path"])
-        physician_report = self.map_codes(row["codes_physician"])
-        muse_report_old = self.map_codes(row["codes_software_old"])
-        muse_report_new = self.map_codes(row["codes_software_new"])
-        if any(not code_list for code_list in (physician_report, muse_report_old, muse_report_new)):
+        reports_physician = self.map_codes(row["codes_physician"])
+        reports_software_old = self.map_codes(row["codes_software_old"])
+        reports_software_new = self.map_codes(row["codes_software_new"])
+        if any(not code_list for code_list in (reports_physician, reports_software_old, reports_software_new)):
             return None
         return {"file_path": row["path"], "ecg" : ecg,
                 "sf" : fields["fs"], "file_name" : row["path"].replace("/", "_"),
-                "physician_report": physician_report,
-                "muse_report_old": muse_report_old,
-                "muse_report_new": muse_report_new,
-                "physician_code": row["codes_physician"],
-                "muse_code_old": row["codes_software_old"],
-                "muse_code_new": row["codes_software_new"],
+                "reports_physician": reports_physician,
+                "reports_software_old": reports_software_old,
+                "reports_software_new": reports_software_new,
+                "codes_physician": row["codes_physician"],
+                "codes_software_old": row["codes_software_old"],
+                "codes_software_new": row["codes_software_new"],
                 "current_order": fields["sig_name"]}
 
     def map_codes(self, codes):
