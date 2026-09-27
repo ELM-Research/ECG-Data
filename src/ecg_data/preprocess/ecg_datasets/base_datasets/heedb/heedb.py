@@ -9,6 +9,9 @@ class HEEDB:
         # diagnoses_dictionary.csv in I0001 and I0006 are identical when only comparing codes and diagnoses columns
         diagnoses_dic = pd.read_csv(f"{self.data_root_path}/I0006/12SL_diagnoses/diagnoses_dictionary.csv")
 
+    def open_data(self, row):
+        pass
+
     def prepare_df(self,):
         cols = ["path", "codes_physician", "codes_software_old", "codes_software_new"]
         groups = sorted(glob.glob(f"{self.data_root_path}/I*"))

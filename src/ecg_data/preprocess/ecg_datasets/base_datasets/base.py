@@ -1,6 +1,11 @@
 import pandas as pd
+import numpy as np
+from tqdm import tqdm
+from scipy import interpolate
 from pathlib import Path
 from ecg_data.preprocess.ecg_datasets.common import get_dataset_module
+
+PTB_ORDER = ["I", "II", "III", "aVL", "aVR", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
 
 class BaseDataset:
     def __init__(self, dataset_module,
@@ -44,9 +49,57 @@ class BaseDataset:
         print("No NaN values found in DataFrame")
         return df
 
+    def create_dataset(self, df):
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        skipped_count = 0
+        
+        try:
+            with ProcessPoolExecutor(max_workers=self.args.num_cores) as executor:
+                futures = [executor.submit(self.iterate_dataset, df.iloc[idx]) for idx in range(len(df))]
+                for future in tqdm(as_completed(futures), total=len(futures), desc="Preprocessing ECGs..."):
+                    try:
+                        result = future.result()
+                        if result is None:
+                            skipped_count += 1
+                    except Exception:
+                        skipped_count += 1
+        except Exception as e:
+            print(f"Error in preprocess_instance: {e!s}")
+        finally:
+            print(f"Total instances skipped: {skipped_count}")
+
+    def iterate_dataset(self, row):
+        try:
+            row_dict = row.to_dict()
+            out = self.dataset_module.open_data(row_dict)
+        except Exception as e:
+            print(f"Error processing: {e!s}. Skipping this instance.")
+            return None
+
+    def unify_lead_order(self, ecg, current_order):
+        if current_order == PTB_ORDER:
+            return ecg
+        order_mapping = {lead: index for index, lead in enumerate(current_order)}
+        new_indices = [order_mapping[lead] for lead in PTB_ORDER]
+        return ecg[:, new_indices]
+
+    def nsample_ecg(self, ecg, orig_fs, target_fs):
+        num_samples, num_leads = ecg.shape
+        duration = num_samples / orig_fs
+        t_original = np.linspace(0, duration, num_samples, endpoint=True)
+        t_target = np.linspace(0, duration, int(num_samples * target_fs / orig_fs), endpoint=True)
+
+        downsampled_data = np.zeros((len(t_target), num_leads))
+        for lead in range(num_leads):
+            f = interpolate.interp1d(t_original, ecg[:, lead], kind="cubic", 
+                                     bounds_error=False, fill_value="extrapolate")
+            downsampled_data[:, lead] = f(t_target)
+        return downsampled_data
+
 
 def build_base_dataset(cfg: dict):
     dataset_module = get_dataset_module(cfg["data_name"],
                                         cfg["data_root_path"],
                                         __package__)
-    return BaseDataset(dataset_module)
+    return BaseDataset(dataset_module, toy_dataset_fraction=cfg["toy_dataset_fraction"],
+                       development=cfg["development"],)
