@@ -1,7 +1,9 @@
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from scipy import interpolate
+from fractions import Fraction
+from multiprocessing import Pool
+from scipy.signal import resample_poly
 from pathlib import Path
 from ecg_data.preprocess.ecg_datasets.common import get_dataset_module
 
@@ -15,7 +17,8 @@ class BaseDataset:
                  segment_length: int = 10, # Seconds
                  save_path: str = None,
                  toy_dataset_fraction: float | None = None,
-                 development: bool = False,):
+                 development: bool = False,
+                 num_cores: int | None = None,):
         self.dataset_module = dataset_module
         self.data_root_path = self.dataset_module.data_root_path
         self.data_name = self.dataset_module.data_name
@@ -23,13 +26,14 @@ class BaseDataset:
         self.segment_length = segment_length
         self.toy_dataset_fraction = toy_dataset_fraction
         self.development = development
+        self.num_cores = num_cores
         self.save_path = save_path
         Path(self.save_path).mkdir(parents=True, exist_ok=True)
 
     def get_df(self,):
         if Path(f"{self.data_root_path}/preprocessed_{self.data_name}.csv").exists():
             print("Getting dataframe...")
-            df = pd.read_csv(f"{self.data_root_path}/preprocessed_{self.data_name}.csv")
+            df = pd.read_csv(f"{self.data_root_path}/preprocessed_{self.data_name}.csv", dtype=str)
         else: df = self.dataset_module.prepare_df()
         print("Dataframe retrieved.")
         print("Cleaning dataframe...")
@@ -59,27 +63,19 @@ class BaseDataset:
         return df
 
     def create_dataset(self, df):
+        rows = (row for _, row in df.iterrows())
         if self.development:
-            for idx in tqdm(range(len(df)), desc = f"Development: {self.development}"):
-                self.iterate_dataset(df.iloc[idx])
+            for row in tqdm(rows, total=len(df), desc = f"Development: {self.development}"):
+                self.iterate_dataset(row)
             return
-        from concurrent.futures import ProcessPoolExecutor, as_completed
         skipped_count = 0
-        
-        try:
-            with ProcessPoolExecutor(max_workers=self.args.num_cores) as executor:
-                futures = [executor.submit(self.iterate_dataset, df.iloc[idx]) for idx in range(len(df))]
-                for future in tqdm(as_completed(futures), total=len(futures), desc="Preprocessing ECGs..."):
-                    try:
-                        result = future.result()
-                        if result is None:
-                            skipped_count += 1
-                    except Exception:
-                        skipped_count += 1
-        except Exception as e:
-            print(f"Error in preprocess_instance: {e!s}")
-        finally:
-            print(f"Total instances skipped: {skipped_count}")
+        with Pool(processes=self.num_cores) as pool:
+            # Batch 32 records per task to amortize process communication overhead.
+            results = pool.imap_unordered(self.iterate_dataset, rows, chunksize=32)
+            for result in tqdm(results, total=len(df), desc="Preprocessing ECGs..."):
+                if result is None:
+                    skipped_count += 1
+        print(f"Total instances skipped: {skipped_count}")
 
     def iterate_dataset(self, row):
         try:
@@ -114,17 +110,9 @@ class BaseDataset:
         return ecg[new_indices, :]
 
     def nsample_ecg(self, ecg, orig_sf):
-        num_leads, num_samples = ecg.shape
-        duration = num_samples / orig_sf
-        t_original = np.linspace(0, duration, num_samples, endpoint=True)
-        t_target = np.linspace(0, duration,
-                               int(num_samples * self.target_sf / orig_sf), endpoint=True)
-        downsampled_data = np.zeros((num_leads, len(t_target)))
-        for lead in range(num_leads):
-            f = interpolate.interp1d(t_original, ecg[lead, :], kind="cubic",
-                                     bounds_error=False, fill_value="extrapolate")
-            downsampled_data[lead, :] = f(t_target)
-        return downsampled_data
+        ratio = Fraction(str(self.target_sf)) / Fraction(str(orig_sf))
+        # Filter before downsampling; axis 1 is time for (lead, time) arrays.
+        return resample_poly(ecg, ratio.numerator, ratio.denominator, axis=1)
 
     def segment_ecg(self, ecg):
         # non-overlapping segments
@@ -139,4 +127,5 @@ def build_base_dataset(cfg: dict):
                        segment_length=cfg["segment_length"],
                        save_path=cfg["save_path"],
                        toy_dataset_fraction=cfg["toy_dataset_fraction"],
-                       development=cfg["development"],)
+                       development=cfg["development"],
+                       num_cores=cfg.get("num_cores"),)
