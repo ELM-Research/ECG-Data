@@ -80,16 +80,23 @@ class BaseDataset:
         try:
             row_dict = row.to_dict()
             out = self.dataset_module.open_data(row_dict)
-            if out is None: return None
+            print(out)
+            if out is None or any(
+                value is None
+                or (isinstance(value, (str, list)) and len(value) == 0)
+                for value in out.values()
+            ): return None # If any values do not exist, lets skip
             if np.any(np.isnan(out["ecg"])) or np.any(np.isinf(out["ecg"])): return None
             assert out["ecg"].shape[1] == 12, f"Unexpected ECG shape: {out['ecg'].shape}"
             ecg = self.unify_lead_order(out["ecg"], out["current_order"])
             if out["sf"] != self.target_sf: ecg = self.nsample_ecg(ecg, out["sf"])
 
-            return [
+            instances = [
                 {**out, "ecg": segment, "sf": self.target_sf, "current_order": PTB_ORDER}
                 for segment in self.segment_ecg(ecg)
             ]
+            print(instances)
+            input()
         except Exception as e:
             print(f"Error processing: {e!s}. Skipping this instance.")
             return None
