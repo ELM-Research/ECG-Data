@@ -80,14 +80,16 @@ class BaseDataset:
         try:
             row_dict = row.to_dict()
             out = self.dataset_module.open_data(row_dict)
-            print(out)
             if out is None: return None
             if np.any(np.isnan(out["ecg"])) or np.any(np.isinf(out["ecg"])): return None
             assert out["ecg"].shape[1] == 12, f"Unexpected ECG shape: {out['ecg'].shape}"
             ecg = self.unify_lead_order(out["ecg"], out["current_order"])
             if out["sf"] != self.target_sf: ecg = self.nsample_ecg(ecg, out["sf"])
 
-            return True
+            return [
+                {**out, "ecg": segment, "sf": self.target_sf, "current_order": PTB_ORDER}
+                for segment in self.segment_ecg(ecg)
+            ]
         except Exception as e:
             print(f"Error processing: {e!s}. Skipping this instance.")
             return None
@@ -112,27 +114,20 @@ class BaseDataset:
             downsampled_data[:, lead] = f(t_target)
         return downsampled_data
 
-    def segment_ecg(self, ecg, report, muse_report = None):
-        time_length, _ = ecg.shape
-        num_segments = time_length // self.segment_length
+    def segment_ecg(self, ecg):
+        # Keep complete, non-overlapping windows of the resampled signal.
+        samples = self.segment_length * self.target_sf
+        if samples <= 0 or not float(samples).is_integer():
+            raise ValueError("Segment duration must produce a positive whole sample count")
+        samples = int(samples)
 
-        ecg_data_segmented = []
-        text_data_segmented = []
-        muse_data_segmented = []
-
-        for i in range(num_segments):
-            start_idx = i * self.segment_length
-            end_idx = (i + 1) * self.segment_length
-            ecg_data_segmented.append(ecg[start_idx:end_idx, :])
-            text_data_segmented.append(report)
-            muse_data_segmented.append(muse_report)
-
-        return np.array(ecg_data_segmented), text_data_segmented, muse_data_segmented
+        return [ecg[start:start + samples] for start in range(0, len(ecg) - samples + 1, samples)]
 
 def build_base_dataset(cfg: dict):
     dataset_module = get_dataset_module(cfg["data_name"],
                                         cfg["data_root_path"],
                                         __package__)
     return BaseDataset(dataset_module, target_sf = cfg["target_sf"],
+                       segment_length=cfg["segment_length"],
                        toy_dataset_fraction=cfg["toy_dataset_fraction"],
                        development=cfg["development"],)

@@ -20,6 +20,7 @@ class HEEDB:
             return None
         return {"file_path": row["path"], "ecg" : ecg,
                 "sf" : fields["fs"], "file_name" : row["path"].replace("/", "_"),
+                "ECGAcquisitionTime": row["ECGAcquisitionTime"],
                 "reports_physician": reports_physician,
                 "reports_software_old": reports_software_old,
                 "reports_software_new": reports_software_new,
@@ -32,11 +33,13 @@ class HEEDB:
         return [self.code_to_diagnosis[int(c)] for c in str(codes).split(",") if int(c) in self.code_to_diagnosis]
 
     def prepare_df(self,):
-        cols = ["path", "codes_physician", "codes_software_old", "codes_software_new"]
+        cols = ["path", "ECGAcquisitionTime", "codes_physician", "codes_software_old", "codes_software_new"]
         groups = sorted(glob.glob(f"{self.data_root_path}/I*"))
         dfs = []
         for group in groups:
-            metadata = pd.read_csv(f"{group}/metadata/metadata.csv", usecols=["FileName"], dtype=str)
+            metadata = pd.read_csv(
+                f"{group}/metadata/metadata.csv", usecols=["FileName", "ECGAcquisitionTime"], dtype=str,
+            )
             diagnoses_v24 = pd.read_csv(
                 f"{group}/12SL_diagnoses/diagnoses_v24.csv",
                 usecols=["FileName", "codes"], dtype=str,
