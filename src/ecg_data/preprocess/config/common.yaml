@@ -1,6 +1,6 @@
 seed: 0
 development: false
-num_cores: null # null uses the CPU count; set an integer to limit worker processes.
+num_cores: 64 # null uses the CPU count; set an integer to limit worker processes.
 toy_dataset_fraction: null
 
 save_path: /batch_data/heedb/preprocessed_250_10

@@ -68,8 +68,7 @@ class BaseDataset:
             return
         skipped_count = 0
         with Pool(processes=self.num_cores) as pool:
-            # Batch 32 records per task to amortize process communication overhead.
-            results = pool.imap_unordered(self.iterate_dataset, rows, chunksize=32)
+            results = pool.imap_unordered(self.iterate_dataset, rows, chunksize=64)
             for result in tqdm(results, total=len(df), desc="Preprocessing ECGs..."):
                 if result is None:
                     skipped_count += 1
