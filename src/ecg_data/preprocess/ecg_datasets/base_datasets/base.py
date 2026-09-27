@@ -8,6 +8,8 @@ from ecg_data.preprocess.ecg_datasets.common import get_dataset_module
 PTB_ORDER = ["I", "II", "III", "aVL", "aVR", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
 
 class BaseDataset:
+    """Preprocess ECG arrays shaped (lead, time)."""
+
     def __init__(self, dataset_module,
                  target_sf : int = 250, # Hz
                  segment_length: int = 10, # Seconds
@@ -87,7 +89,7 @@ class BaseDataset:
                 for value in out.values()
             ): return None # If any values do not exist, lets skip
             if np.any(np.isnan(out["ecg"])) or np.any(np.isinf(out["ecg"])): return None
-            assert out["ecg"].shape[1] == 12, f"Unexpected ECG shape: {out['ecg'].shape}"
+            assert out["ecg"].shape[0] == 12, f"Unexpected ECG shape: {out['ecg'].shape}"
             ecg = self.unify_lead_order(out["ecg"], out["current_order"])
             if out["sf"] != self.target_sf: ecg = self.nsample_ecg(ecg, out["sf"])
 
@@ -106,19 +108,19 @@ class BaseDataset:
             return ecg
         order_mapping = {lead: index for index, lead in enumerate(current_order)}
         new_indices = [order_mapping[lead] for lead in PTB_ORDER]
-        return ecg[:, new_indices]
+        return ecg[new_indices, :]
 
     def nsample_ecg(self, ecg, orig_sf):
-        num_samples, num_leads = ecg.shape
+        num_leads, num_samples = ecg.shape
         duration = num_samples / orig_sf
         t_original = np.linspace(0, duration, num_samples, endpoint=True)
         t_target = np.linspace(0, duration,
                                int(num_samples * self.target_sf / orig_sf), endpoint=True)
-        downsampled_data = np.zeros((len(t_target), num_leads))
+        downsampled_data = np.zeros((num_leads, len(t_target)))
         for lead in range(num_leads):
-            f = interpolate.interp1d(t_original, ecg[:, lead], kind="cubic", 
+            f = interpolate.interp1d(t_original, ecg[lead, :], kind="cubic",
                                      bounds_error=False, fill_value="extrapolate")
-            downsampled_data[:, lead] = f(t_target)
+            downsampled_data[lead, :] = f(t_target)
         return downsampled_data
 
     def segment_ecg(self, ecg):
@@ -128,7 +130,7 @@ class BaseDataset:
             raise ValueError("Segment duration must produce a positive whole sample count")
         samples = int(samples)
 
-        return [ecg[start:start + samples] for start in range(0, len(ecg) - samples + 1, samples)]
+        return [ecg[:, start:start + samples] for start in range(0, ecg.shape[1] - samples + 1, samples)]
 
 def build_base_dataset(cfg: dict):
     dataset_module = get_dataset_module(cfg["data_name"],
