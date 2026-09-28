@@ -1,0 +1,5 @@
+seed: 0
+development: false
+num_cores: 64 # null uses the CPU count; set an integer to limit worker processes.
+
+save_path: /p01/whan/ECG-Data/src/ecg_data/analysis/software_v_human/results

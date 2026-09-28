@@ -1,0 +1,5 @@
+defaults:
+  - ./common.yaml
+
+data_name: heedb
+data_path: /batch_data/heedb/preprocessed_250_10
