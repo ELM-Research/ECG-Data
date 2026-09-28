@@ -9,13 +9,13 @@ from ecg_data.analysis.software_v_human.terms import TERMS
 from ecg_data.preprocess.config.load import get_config
 
 
-def _text(report):
+def to_text(report):
     if isinstance(report, list):
         report = " ".join(report)
     return " ".join(report.lower().split())
 
 
-def _read_reports(data_path, data_name):
+def read_reports(data_path, data_name):
     if data_name == "agh":
         for path in sorted(Path(data_path).glob("*.json")):
             for instance in json.loads(path.read_text()):
@@ -33,7 +33,7 @@ def _read_reports(data_path, data_name):
     raise ValueError(f"Unknown dataset: {data_name}")
 
 
-def _analyze(reports, save_path):
+def analyze(reports, save_path):
     summaries = {}
     rows = {}
     patterns = {term: re.compile(rf"\b{re.escape(term)}\b") for terms in TERMS.values() for term in terms}
@@ -51,7 +51,7 @@ def _analyze(reports, save_path):
         if original is None or final is None:
             summary["excluded_reports"] += 1
             continue
-        original, final = _text(original), _text(final)
+        original, final = to_text(original), to_text(final)
 
         matches = []
         cohort = "unchanged"
@@ -133,4 +133,4 @@ def _analyze(reports, save_path):
 
 if __name__ == "__main__":
     cfg = get_config()
-    _analyze(_read_reports(cfg["data_path"], cfg["data_name"]), cfg["save_path"])
+    analyze(read_reports(cfg["data_path"], cfg["data_name"]), cfg["save_path"])
