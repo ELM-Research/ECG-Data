@@ -3,6 +3,7 @@ import json
 import re
 import numpy as np
 from pathlib import Path
+from tqdm import tqdm
 from multiprocessing import Pool
 from ecg_data.analysis.software_v_human.terms import TERMS
 from ecg_data.preprocess.config.load import get_config
@@ -153,4 +154,5 @@ if __name__ == "__main__":
             read_reports(cfg["data_path"], cfg["data_name"]),
             chunksize=100,
         )
-        analyze(reports, cfg["save_path"])
+        analyze(tqdm(reports, desc = f"Analyzing {cfg['data_name']}", unit = "report"),
+                cfg["save_path"])
