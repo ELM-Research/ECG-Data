@@ -1,13 +1,38 @@
 import csv
 import json
 import re
-from pathlib import Path
-
 import numpy as np
-
+from pathlib import Path
+from multiprocessing import Pool
 from ecg_data.analysis.software_v_human.terms import TERMS
 from ecg_data.preprocess.config.load import get_config
 
+PATTERNS = {
+    term: re.compile(rf"\b{re.escape(term)}\b")
+    for terms in TERMS.values()
+    for term in terms
+}
+
+def process_report(report):
+    name, original, final = report
+    if original is None or final is None:
+        return name, None, None
+
+    original, final = to_text(original), to_text(final)
+    matches = []
+    cohort = "unchanged"
+
+    for category, terms in TERMS.items():
+        for term in terms:
+            before = len(PATTERNS[term].findall(original))
+            after = len(PATTERNS[term].findall(final))
+            if not before and not after:
+                continue
+            matches.append((category, term, before, after))
+            if not before or not after:
+                cohort = "modified"
+
+    return name, cohort, matches
 
 def to_text(report):
     if isinstance(report, list):
@@ -36,9 +61,8 @@ def read_reports(data_path, data_name):
 def analyze(reports, save_path):
     summaries = {}
     rows = {}
-    patterns = {term: re.compile(rf"\b{re.escape(term)}\b") for terms in TERMS.values() for term in terms}
 
-    for name, original, final in reports:
+    for name, cohort, matches in reports:
         summary = summaries.setdefault(name, {
             "total_reports": 0,
             "analyzed_reports": 0,
@@ -48,22 +72,10 @@ def analyze(reports, save_path):
             "modified_reports": 0,
         })
         summary["total_reports"] += 1
-        if original is None or final is None:
+
+        if matches is None:
             summary["excluded_reports"] += 1
             continue
-        original, final = to_text(original), to_text(final)
-
-        matches = []
-        cohort = "unchanged"
-        for category, terms in TERMS.items():
-            for term in terms:
-                before = len(patterns[term].findall(original))
-                after = len(patterns[term].findall(final))
-                if not before and not after:
-                    continue
-                matches.append((category, term, before, after))
-                if not before or not after:
-                    cohort = "modified"
 
         if not matches:
             summary["skipped_no_terms"] += 1
@@ -72,6 +84,7 @@ def analyze(reports, save_path):
         summary["analyzed_reports"] += 1
         summary[f"{cohort}_reports"] += 1
 
+        # Keep your existing code from here onward:
         for category, term, before, after in matches:
             for group in ("all", cohort):
                 row = rows.setdefault((name, group, term), {
@@ -133,4 +146,11 @@ def analyze(reports, save_path):
 
 if __name__ == "__main__":
     cfg = get_config()
-    analyze(read_reports(cfg["data_path"], cfg["data_name"]), cfg["save_path"])
+
+    with Pool() as pool:
+        reports = pool.imap_unordered(
+            process_report,
+            read_reports(cfg["data_path"], cfg["data_name"]),
+            chunksize=100,
+        )
+        analyze(reports, cfg["save_path"])
