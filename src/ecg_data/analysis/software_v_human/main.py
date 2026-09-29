@@ -1,3 +1,4 @@
+import csv
 import json
 import re
 from pathlib import Path
@@ -7,9 +8,30 @@ from multiprocessing import Pool
 import numpy as np
 
 from ecg_data.analysis.software_v_human.terms import TERMS
-from ecg_data.analysis.software_v_human.results import save_results
 from ecg_data.preprocess.config.load import get_config
 
+
+TABLES = {
+    "counts": (
+        "original_term_frequency",
+        "original_report_count",
+        "final_term_frequency",
+        "final_report_count",
+    ),
+    "prevalence": (
+        "report_count",
+        "original_report_proportion",
+        "final_report_proportion",
+    ),
+    "changes": (
+        "group_1_retained",
+        "group_2_deleted",
+        "group_3_added",
+        "group_4_never_present",
+        "added_report_ratio",
+        "deleted_report_ratio",
+    ),
+}
 
 PATTERNS = {
     term: re.compile(rf"\b{re.escape(term)}\b")
@@ -70,6 +92,17 @@ def read_reports(data_path, data_name):
         return
 
     raise ValueError(f"Unknown dataset: {data_name}")
+
+
+def save_results(path, summary, rows):
+    (path / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+
+    for name, columns in TABLES.items():
+        fields = ("cohort", "category", "term", *columns)
+        with (path / f"{name}.csv").open("w", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
 
 
 def analyze(reports, save_path):

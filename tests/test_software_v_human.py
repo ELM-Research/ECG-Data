@@ -84,8 +84,6 @@ class ReportAnalysisTest(unittest.TestCase):
                 self.assertEqual(row["added_report_ratio"], "")
                 self.assertEqual(row["deleted_report_ratio"], "")
                 self.assertEqual(prevalence[key]["original_report_proportion"], "")
-            self.assertTrue((self.path / comparison / "overview.png").is_file())
-            self.assertTrue((self.path / comparison / "terms.pdf").is_file())
         unobserved = self.table("changes")[("modified", "brugada pattern")]
         self.assertEqual(unobserved["added_report_ratio"], "0.0")
         self.assertEqual(unobserved["deleted_report_ratio"], "")
