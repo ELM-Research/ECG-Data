@@ -14,7 +14,7 @@ from matplotlib.ticker import MaxNLocator, PercentFormatter
 OVERVIEW_TERMS = 15
 
 
-def _plot_changes(path, summary, rows, title, scope):
+def plot_changes(path, summary, rows, title, scope):
     figure = Figure(figsize=(14, max(3.2, 2.1 + len(rows) * 0.4)), layout="constrained")
     FigureCanvasAgg(figure)
     figure.suptitle(
@@ -73,16 +73,15 @@ def render_results(path):
             row[key] = float(row[key]) if row[key] else None
     rows.sort(key=lambda row: (-(row["group_2_deleted"] + row["group_3_added"]), row["term"]))
     changed = [row for row in rows if row["group_2_deleted"] + row["group_3_added"]]
-    shown = changed[:OVERVIEW_TERMS]
-    figure = _plot_changes(
-        path, summary, shown, "Physician edits",
-        f"Top {len(shown)} of {len(changed)} edited terms · Ranked by added + removed report counts",
+    figure = plot_changes(
+        path, summary, changed, "Physician edits",
+        f"Top {len(changed)} of {len(changed)} edited terms · Ranked by added + removed report counts",
     )
     figure.savefig(path / "overview.png", dpi=180)
 
     for category in dict.fromkeys(row["category"] for row in rows):
         terms = [row for row in rows if row["category"] == category]
-        figure = _plot_changes(
+        figure = plot_changes(
             path, summary, terms, category,
             f"All {len(terms)} terms · Ranked by added + removed report counts",
         )

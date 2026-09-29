@@ -5,6 +5,4 @@ uv run python src/ecg_data/analysis/software_v_human/main.py \
 --config src/ecg_data/analysis/config/software_v_human_heedb.yaml
 
 
-# uv run python src/ecg_data/analysis/software_v_human/results_interpreter.py
-
-uv run python -m ecg_data.analysis.software_v_human.results "$@"
+# uv run python src/ecg_data/analysis/software_v_human/results_interpreter.py src/ecg_data/analysis/software_v_human/reslysis/software_v_human/results/agh
