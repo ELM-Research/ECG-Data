@@ -1,18 +1,11 @@
-"""Render saved software-versus-physician results without rerunning analysis."""
-
 import argparse
 import csv
 import json
 from pathlib import Path
 import re
-
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator, PercentFormatter
-
-
-OVERVIEW_TERMS = 15
-
 
 def plot_changes(path, summary, rows, title, scope):
     figure = Figure(figsize=(14, max(3.2, 2.1 + len(rows) * 0.4)), layout="constrained")
