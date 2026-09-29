@@ -40,9 +40,7 @@ PATTERNS = {
 }
 
 
-def to_text(report):
-    if isinstance(report, list):
-        report = " ".join(report)
+def normalize_text(report):
     return " ".join(report.lower().split())
 
 
@@ -58,7 +56,7 @@ def process_report(report):
         final = " ".join(final)
 
     cohort = "unchanged" if original == final else "modified"
-    original, final = to_text(original), to_text(final)
+    original, final = normalize_text(original), normalize_text(final)
     matches = []
 
     for category, terms in TERMS.items():
