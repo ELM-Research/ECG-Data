@@ -7,3 +7,4 @@ uv run python src/ecg_data/analysis/software_v_human/main.py \
 
 # uv run python src/ecg_data/analysis/software_v_human/results_interpreter.py
 
+uv run python -m ecg_data.analysis.software_v_human.results "$@"
