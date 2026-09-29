@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-def _load_all(run_dir: Path) -> pd.DataFrame:
+def load_all(run_dir: Path) -> pd.DataFrame:
     df = pd.read_csv(run_dir / "terms.csv")
     df = df.loc[df["cohort"] == "all"].copy()
     df = df[(df["original_report_count"] > 0) | (df["final_report_count"] > 0)]
@@ -15,7 +15,7 @@ def _load_all(run_dir: Path) -> pd.DataFrame:
 
 def plot_term_analysis(run_dir: Path) -> None:
     run_dir = Path(run_dir)
-    df = _load_all(run_dir)
+    df = load_all(run_dir)
     summary = json.loads((run_dir / "summary.json").read_text())
     n = summary["analyzed_reports"]
     categories = list(dict.fromkeys(df["category"]))
@@ -48,7 +48,7 @@ def plot_term_analysis(run_dir: Path) -> None:
 
     axes[-1].set_xlabel(f"Reports containing term  (n = {n:,})")
     fig.tight_layout()
-    fig.savefig(run_dir / "term_counts.pdf", bbox_inches="tight")
+    fig.savefig(run_dir / "term_counts.png", dpi = 200, bbox_inches="tight")
     plt.close(fig)
 
     # 2. Added / deleted ratios
@@ -70,5 +70,10 @@ def plot_term_analysis(run_dir: Path) -> None:
             ax.spines[side].set_visible(False)
 
     fig.tight_layout()
-    fig.savefig(run_dir / "term_ratios.pdf", bbox_inches="tight")
+    fig.savefig(run_dir / "term_ratios.png", dpi = 200, bbox_inches="tight")
     plt.close(fig)
+
+if __name__ == "__main__":
+    plot_term_analysis("src/ecg_data/analysis/software_v_human/results/agh")
+    plot_term_analysis("src/ecg_data/analysis/software_v_human/results/heedb_new")
+    plot_term_analysis("src/ecg_data/analysis/software_v_human/results/heedb_old")
