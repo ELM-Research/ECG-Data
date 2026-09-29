@@ -1,4 +1,3 @@
-import csv
 import json
 import re
 from pathlib import Path
@@ -8,6 +7,7 @@ from multiprocessing import Pool
 import numpy as np
 
 from ecg_data.analysis.software_v_human.terms import TERMS
+from ecg_data.analysis.software_v_human.results import save_results
 from ecg_data.preprocess.config.load import get_config
 
 
@@ -177,34 +177,7 @@ def analyze(reports, save_path):
         path = Path(save_path) / name
         path.mkdir(parents=True, exist_ok=True)
 
-        (path / "summary.json").write_text(
-            json.dumps(summary, indent=2) + "\n"
-        )
-
-        with (path / "terms.csv").open("w", newline="") as file:
-            writer = csv.DictWriter(
-                file,
-                fieldnames=[
-                    "cohort",
-                    "category",
-                    "term",
-                    "report_count",
-                    "original_term_frequency",
-                    "original_report_count",
-                    "original_report_proportion",
-                    "final_term_frequency",
-                    "final_report_count",
-                    "final_report_proportion",
-                    "group_1_retained",
-                    "group_2_deleted",
-                    "group_3_added",
-                    "group_4_never_present",
-                    "added_report_ratio",
-                    "deleted_report_ratio",
-                ],
-            )
-            writer.writeheader()
-            writer.writerows(result)
+        save_results(path, summary, result)
 
         print(
             f"{name}: {total} analyzed, "
