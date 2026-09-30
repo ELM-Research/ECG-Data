@@ -2,4 +2,5 @@ defaults:
   - ./common.yaml
 
 data_name: mimic_iv_ecg
-data_root_path: /p01/whan/data/mimic_iv
+data_root_path: /p01/whan/data/mimic_iv_ecg
+save_path: /p01/whan/data/mimic_iv_ecg/preprocessed_250_10

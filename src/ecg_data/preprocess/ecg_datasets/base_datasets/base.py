@@ -7,7 +7,7 @@ from scipy.signal import resample_poly
 from pathlib import Path
 from ecg_data.preprocess.ecg_datasets.common import get_dataset_module
 
-PTB_ORDER = ["I", "II", "III", "aVL", "aVR", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
+PTB_ORDER = ['I', 'II', 'III', 'AVR', 'AVL', 'AVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
 
 class BaseDataset:
     def __init__(self, dataset_module,
@@ -35,20 +35,16 @@ class BaseDataset:
             print("Getting dataframe...")
             df = pd.read_csv(f"{self.data_root_path}/preprocessed_{self.data_name}.csv", dtype=str)
         else: df = self.dataset_module.prepare_df()
-        print("Dataframe retrieved.")
         print("Cleaning dataframe...")
         df = self.clean_dataframe(df)
-        print("Dataframe cleaned.")
         if self.development:
             print("Dev mode is on. Reducing dataframe size to 1000 instances...")
             df = df.iloc[:1000]
         if self.toy_dataset_fraction:
             print(f"Toy mode is on. Reducing dataframe size to {self.toy_dataset_fraction} of original size...")
             df = df.sample(frac=self.toy_dataset_fraction, random_state=42).reset_index(drop=True)
-        print("Dataframe retrieved and cleaned.")
         print(df.head())
         print(f"Number of instances in dataframe: {len(df)}")
-        print("Dataframe prepared.")
         return df
 
     def clean_dataframe(self, df):
@@ -82,6 +78,7 @@ class BaseDataset:
         try:
             row_dict = row.to_dict()
             out = self.dataset_module.open_data(row_dict)
+            if self.development: print(out)
             if out is None or any(
                 value is None
                 or (isinstance(value, (str, list)) and len(value) == 0)
@@ -99,6 +96,7 @@ class BaseDataset:
             part = Path(self.save_path) / f"part_{row_index // self.records_per_part:06d}"
             part.mkdir(parents=True, exist_ok=True)
             for i in range(len(instances)):
+                if self.development: print(instances[i])
                 np.save(part / f"{out['file_name']}_{i}.npy", instances[i])
             return True
         except Exception as e:
@@ -106,15 +104,15 @@ class BaseDataset:
             return None
 
     def unify_lead_order(self, ecg, current_order):
-        if current_order == PTB_ORDER:
-            return ecg
-        order_mapping = {lead: index for index, lead in enumerate(current_order)}
-        new_indices = [order_mapping[lead] for lead in PTB_ORDER]
+        current_order_norm = [lead.lower() for lead in current_order]
+        ptb_order_norm = [lead.lower() for lead in PTB_ORDER]
+        if current_order_norm == ptb_order_norm: return ecg
+        order_mapping = {lead.lower(): index for index, lead in enumerate(current_order_norm)}
+        new_indices = [order_mapping[lead.lower()] for lead in ptb_order_norm]
         return ecg[new_indices, :]
 
     def nsample_ecg(self, ecg, orig_sf):
         ratio = Fraction(str(self.target_sf)) / Fraction(str(orig_sf))
-        # Filter before downsampling; axis 1 is time for (lead, time) arrays.
         return resample_poly(ecg, ratio.numerator, ratio.denominator, axis=1)
 
     def segment_ecg(self, ecg):

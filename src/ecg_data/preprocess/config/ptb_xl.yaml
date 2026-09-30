@@ -2,3 +2,5 @@ defaults:
   - ./common.yaml
 
 data_name: ptb_xl
+data_root_path: /p01/whan/data/ptb_xl
+save_path: /p01/whan/data/ptb_xl/preprocessed_250_10
