@@ -7,18 +7,18 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator, PercentFormatter
 
-def plot_changes(path, summary, rows, title, scope):
+def plot_changes(path, summary, rows, title):
     figure = Figure(figsize=(14, max(3.2, 2.1 + len(rows) * 0.4)), layout="constrained")
     FigureCanvasAgg(figure)
     figure.suptitle(
-        f"{path.name} | {title}\n{scope}\n"
+        f"{path.name} | {title}\n"
         f"{summary['modified_reports']:,} modified reports · N = reports with that edit",
         fontsize=11,
     )
     axes = figure.subplots(1, 2, sharey=True)
     y = list(range(len(rows)))
 
-    for axis, ratio, count, title, denominator, color in (
+    for axis, ratio, count, axis_title, denominator, color in (
         (axes[0], "added_report_ratio", "group_3_added", "Added by physician", "without", "#288274"),
         (axes[1], "deleted_report_ratio", "group_2_deleted", "Removed by physician", "with", "#bb643f"),
     ):
@@ -32,7 +32,7 @@ def plot_changes(path, summary, rows, title, scope):
                 percent = f"{value:.1%}" if value >= 0.01 else f"{100 * value:.2g}%"
             labels.append(f"{percent} · N={row[count]:,}")
         axis.bar_label(bars, labels=labels, padding=5, fontsize=9)
-        axis.set_title(title, loc="left", fontsize=12, weight="bold")
+        axis.set_title(axis_title, loc="left", fontsize=12, weight="bold")
         axis.set_xlabel(f"% of reports {denominator} the term in software", fontsize=9)
         peak = max(values, default=0) or 1
         ticks = MaxNLocator(nbins=3).tick_values(0, peak)
@@ -66,18 +66,12 @@ def render_results(path):
             row[key] = float(row[key]) if row[key] else None
     rows.sort(key=lambda row: (-(row["group_2_deleted"] + row["group_3_added"]), row["term"]))
     changed = [row for row in rows if row["group_2_deleted"] + row["group_3_added"]]
-    figure = plot_changes(
-        path, summary, changed, "Physician edits",
-        f"Top {len(changed)} of {len(changed)} edited terms · Ranked by added + removed report counts",
-    )
+    figure = plot_changes(path, summary, changed, "Physician edits",)
     figure.savefig(path / "overview.png", dpi=180)
-
     for category in dict.fromkeys(row["category"] for row in rows):
         terms = [row for row in rows if row["category"] == category]
         figure = plot_changes(
-            path, summary, terms, category,
-            f"All {len(terms)} terms · Ranked by added + removed report counts",
-        )
+            path, summary, terms, category,)
         filename = re.sub(r"[^a-z0-9]+", "_", category.lower()).strip("_")
         figure.savefig(path / f"terms_{filename}.png", dpi=180)
 
