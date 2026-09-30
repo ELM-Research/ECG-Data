@@ -67,6 +67,7 @@ class BaseDataset:
         if self.development:
             for row in tqdm(rows, total=len(df), desc = f"Development: {self.development}"):
                 self.iterate_dataset(row)
+                input()
             return
         skipped_count = 0
         with Pool(processes=self.num_cores) as pool:

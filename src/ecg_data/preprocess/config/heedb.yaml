@@ -1,5 +1,6 @@
 defaults:
   - ./common.yaml
 
+save_path: /batch_data/heedb/preprocessed_250_10
 data_name: heedb
 data_root_path: /p01/whan/data/HEED
