@@ -22,7 +22,7 @@ class HEEDB:
         return {"file_path": row["path"], "ecg" : ecg,
                 "sf" : fields["fs"], "file_name" : row["path"].replace("/", "_"),
                 "ECGAcquisitionTime": row["ECGAcquisitionTime"],
-                "reports_physician": reports_physician,
+                "reports_physician": reports_physician, # here reports are a list of strings
                 "reports_software_old": reports_software_old,
                 "reports_software_new": reports_software_new,
                 "codes_physician": row["codes_physician"],

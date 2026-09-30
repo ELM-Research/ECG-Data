@@ -12,9 +12,10 @@ class PTB_XL:
     def open_data(self, row):
         ecg, fields = open_wfdb(f"{self.data_root_path}/{row['path']}")
         ecg = ecg.T  # WFDB returns (time, lead) --> (lead, time).
-        return {"file_path": row["path"], "ecg" : ecg,
-                "sf" : fields["fs"], "file_name" : row["path"].replace("/", "_"),
-                "reports_physician": row["report"], "current_order": fields["sig_name"]}
+        return {"file_path": f"{self.data_root_path}/{row['path']}", "ecg" : ecg,
+                "sf" : fields["fs"], "file_name" : f"{self.data_root_path}/{row['path']}".replace("/", "_"),
+                "reports_physician": row["report"], # here report is a string as we use the report column from ptbxl database csv
+                "current_order": fields["sig_name"]}
 
     def prepare_df(self,):
         ptbxl_database = pd.read_csv(f"{self.data_root_path}/ptbxl_database.csv", index_col="ecg_id")
