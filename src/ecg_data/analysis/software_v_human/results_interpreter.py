@@ -7,7 +7,19 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator, PercentFormatter
 
-def plot_changes(path, summary, rows, title):
+METRICS = {
+    "edits": (
+        ("added_report_ratio", "Added by physician", "% of reports without the term in software"),
+        ("deleted_report_ratio", "Removed by physician", "% of reports with the term in software"),
+    ),
+    "error_rates": (
+        ("false_negative_rate", "Added by physician (false negative rate)", "% of reports with the term in physician report"),
+        ("false_positive_rate", "Removed by physician (false positive rate)", "% of reports without the term in physician report"),
+    ),
+}
+
+
+def plot_changes(path, summary, rows, title, metric="edits"):
     figure = Figure(figsize=(14, max(3.2, 2.1 + len(rows) * 0.4)), layout="constrained")
     FigureCanvasAgg(figure)
     figure.suptitle(
@@ -18,9 +30,9 @@ def plot_changes(path, summary, rows, title):
     axes = figure.subplots(1, 2, sharey=True)
     y = list(range(len(rows)))
 
-    for axis, ratio, count, axis_title, denominator, color in (
-        (axes[0], "added_report_ratio", "group_3_added", "Added by physician", "without", "#288274"),
-        (axes[1], "deleted_report_ratio", "group_2_deleted", "Removed by physician", "with", "#bb643f"),
+    for axis, (ratio, axis_title, denominator), count, color in zip(
+        axes, METRICS[metric],
+        ("group_3_added", "group_2_deleted"), ("#288274", "#bb643f"),
     ):
         values = [row[ratio] if row[ratio] is not None else 0 for row in rows]
         bars = axis.barh(y, values, height=0.6, color=color)
@@ -33,7 +45,7 @@ def plot_changes(path, summary, rows, title):
             labels.append(f"{percent} · N={row[count]:,}")
         axis.bar_label(bars, labels=labels, padding=5, fontsize=9)
         axis.set_title(axis_title, loc="left", fontsize=12, weight="bold")
-        axis.set_xlabel(f"% of reports {denominator} the term in software", fontsize=9)
+        axis.set_xlabel(denominator, fontsize=9)
         peak = max(values, default=0) or 1
         ticks = MaxNLocator(nbins=3).tick_values(0, peak)
         ticks = [tick for tick in ticks if 0 <= tick <= 1]
@@ -50,7 +62,7 @@ def plot_changes(path, summary, rows, title):
 
     axes[0].set_yticks(y, [row["term"] for row in rows])
     axes[0].set_ylim(max(1, len(rows)) - 0.5, -0.5)
-    if any(row[key] is None for row in rows for key in ("added_report_ratio", "deleted_report_ratio")):
+    if any(row[key] is None for row in rows for key, _, _ in METRICS[metric]):
         figure.supxlabel("n/a = no eligible reports", fontsize=9, color="#58616b")
     return figure
 
@@ -60,20 +72,25 @@ def render_results(path):
     with (path / "changes.csv").open() as file:
         rows = [row for row in csv.DictReader(file) if row["cohort"] == "modified"]
     for row in rows:
-        for key in ("group_2_deleted", "group_3_added"):
+        for key in ("group_1_retained", "group_2_deleted", "group_3_added", "group_4_never_present"):
             row[key] = int(row[key])
         for key in ("added_report_ratio", "deleted_report_ratio"):
             row[key] = float(row[key]) if row[key] else None
+        present = row["group_1_retained"] + row["group_3_added"]
+        absent = row["group_2_deleted"] + row["group_4_never_present"]
+        row["false_negative_rate"] = row["group_3_added"] / present if present else None
+        row["false_positive_rate"] = row["group_2_deleted"] / absent if absent else None
     rows.sort(key=lambda row: (-(row["group_2_deleted"] + row["group_3_added"]), row["term"]))
     changed = [row for row in rows if row["group_2_deleted"] + row["group_3_added"]]
-    figure = plot_changes(path, summary, changed, "Physician edits",)
-    figure.savefig(path / "overview.png", dpi=180)
-    for category in dict.fromkeys(row["category"] for row in rows):
-        terms = [row for row in rows if row["category"] == category]
-        figure = plot_changes(
-            path, summary, terms, category,)
-        filename = re.sub(r"[^a-z0-9]+", "_", category.lower()).strip("_")
-        figure.savefig(path / f"terms_{filename}.png", dpi=180)
+    for metric in METRICS:
+        suffix = "" if metric == "edits" else "_error_rates"
+        figure = plot_changes(path, summary, changed, "Physician edits", metric)
+        figure.savefig(path / f"overview{suffix}.png", dpi=180)
+        for category in dict.fromkeys(row["category"] for row in rows):
+            terms = [row for row in rows if row["category"] == category]
+            figure = plot_changes(path, summary, terms, category, metric)
+            filename = re.sub(r"[^a-z0-9]+", "_", category.lower()).strip("_")
+            figure.savefig(path / f"terms_{filename}{suffix}.png", dpi=180)
 
 
 if __name__ == "__main__":
