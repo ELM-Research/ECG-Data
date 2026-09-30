@@ -14,5 +14,9 @@
 
 
 # MIMIC IV ECG
+# uv run python src/ecg_data/preprocess/preprocess_base.py \
+# --config src/ecg_data/preprocess/config/mimic_iv_ecg.yaml
+
+# EchoNext
 uv run python src/ecg_data/preprocess/preprocess_base.py \
---config src/ecg_data/preprocess/config/mimic_iv_ecg.yaml
+--config src/ecg_data/preprocess/config/echonext.yaml
