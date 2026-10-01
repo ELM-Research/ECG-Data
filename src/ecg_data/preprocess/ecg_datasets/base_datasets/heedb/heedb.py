@@ -13,13 +13,12 @@ class HEEDB:
 
     def open_data(self, row):
         ecg, fields = open_wfdb(row["path"])
-        ecg = ecg.T  # WFDB returns (time, lead) --> (lead, time).
         clean_codes_physician, reports_physician = self.map_codes(row["codes_physician"])
         clean_codes_software_old, reports_software_old = self.map_codes(row["codes_software_old"])
         clean_codes_software_new, reports_software_new = self.map_codes(row["codes_software_new"])
         if any(not code_list for code_list in (reports_physician, reports_software_old, reports_software_new)):
             return None
-        return {"file_path": row["path"], "ecg" : ecg,
+        return {"file_path": row["path"], "ecg" : ecg.T,
                 "sf" : fields["fs"], "file_name" : row["path"].replace("/", "_"),
                 "ECGAcquisitionTime": row["ECGAcquisitionTime"],
                 "reports_physician": reports_physician, # here reports are a list of strings

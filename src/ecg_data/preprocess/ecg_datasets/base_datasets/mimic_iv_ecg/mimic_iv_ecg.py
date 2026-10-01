@@ -8,8 +8,7 @@ class MIMIC_IV_ECG:
 
     def open_data(self, row):
         ecg, fields = open_wfdb(f"{self.data_root_path}/{row['path']}")
-        ecg = ecg.T  # WFDB returns (time, lead) --> (lead, time).
-        return {"file_path": f"{self.data_root_path}/{row['path']}", "ecg" : ecg,
+        return {"file_path": f"{self.data_root_path}/{row['path']}", "ecg" : ecg.T,
                 "sf" : fields["fs"], "file_name" : f"{self.data_root_path}/{row['path']}".replace("/", "_"),
                 "reports_physician": row["report"], "current_order": fields["sig_name"]}
 

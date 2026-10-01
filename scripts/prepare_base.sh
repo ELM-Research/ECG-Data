@@ -23,5 +23,10 @@
 
 
 # Code15
+# uv run python src/ecg_data/preprocess/preprocess_base.py \
+# --config src/ecg_data/preprocess/config/code15.yaml
+
+
+# CPSC
 uv run python src/ecg_data/preprocess/preprocess_base.py \
---config src/ecg_data/preprocess/config/code15.yaml
+--config src/ecg_data/preprocess/config/cpsc.yaml
