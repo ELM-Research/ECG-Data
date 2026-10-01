@@ -7,7 +7,24 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator, PercentFormatter
 
+from ecg_data.analysis.software_v_human.terms import TERMS
+
 GROUPS = ("group_1_retained", "group_2_deleted", "group_3_added", "group_4_never_present")
+_TERM_ORDER = {term: index for index, term in enumerate(term for terms in TERMS.values() for term in terms)}
+_DENOMINATORS = {
+    "edits": (
+        ("group_3_added", "group_4_never_present"),
+        ("group_1_retained", "group_2_deleted"),
+    ),
+    "error_rates": (
+        ("group_1_retained", "group_3_added"),
+        ("group_2_deleted", "group_4_never_present"),
+    ),
+    "disagreement": (
+        ("group_1_retained", "group_2_deleted", "group_3_added"),
+        ("group_1_retained", "group_2_deleted", "group_3_added"),
+    ),
+}
 METRICS = {
     "edits": (
         ("added_report_ratio", "Added by physician", "% of reports without the term in software"),
@@ -28,21 +45,23 @@ def plot_changes(path, summary, rows, title, metric="edits", *, cohort="modified
     metrics = METRICS[metric]
     count = summary["analyzed_reports"] if cohort == "all" else summary[f"{cohort}_reports"]
     cohort_label = "all analyzed" if cohort == "all" else cohort
-    figure = Figure(figsize=(14, max(3.2, 2.1 + len(rows) * 0.4)), layout="constrained")
+    figure = Figure(figsize=(16, max(3.2, 2.1 + len(rows) * 0.4)), layout="constrained")
     FigureCanvasAgg(figure)
     figure.suptitle(
         f"{path.name} | {title}\n"
-        f"{count:,} {cohort_label} reports · N = reports with that edit",
+        f"{count:,} {cohort_label} reports · Labels: % (edited / eligible reports)",
         fontsize=11,
     )
     axes = figure.subplots(1, 2, sharey=True, sharex=sharex)
     y = list(range(len(rows)))
     shared_peak = max((row[key] or 0 for row in rows for key, _, _ in metrics), default=0)
 
-    for axis, (ratio, axis_title, denominator), count, color in zip(
-        axes, metrics,
+    for axis, (ratio, axis_title, denominator), groups, count_key, color in zip(
+        axes, metrics, _DENOMINATORS[metric],
         ("group_3_added", "group_2_deleted"), ("#288274", "#bb643f"),
     ):
+        for index in y[::2]:
+            axis.axhspan(index - 0.5, index + 0.5, color="#f4f6f8", zorder=0)
         values = [row[ratio] if row[ratio] is not None else 0 for row in rows]
         bars = axis.barh(y, values, height=0.6, color=color)
         labels = []
@@ -51,7 +70,8 @@ def plot_changes(path, summary, rows, title, metric="edits", *, cohort="modified
             percent = "n/a"
             if value is not None:
                 percent = f"{value:.1%}" if value >= 0.01 else f"{100 * value:.2g}%"
-            labels.append(f"{percent} · N={row[count]:,}")
+            eligible = sum(row[key] for key in groups)
+            labels.append(f"{percent} ({row[count_key]:,} / {eligible:,})")
         axis.bar_label(bars, labels=labels, padding=5, fontsize=9)
         axis.set_title(axis_title, loc="left", fontsize=12, weight="bold")
         axis.set_xlabel(denominator, fontsize=9)
@@ -59,7 +79,7 @@ def plot_changes(path, summary, rows, title, metric="edits", *, cohort="modified
         ticks = MaxNLocator(nbins=3).tick_values(0, peak)
         ticks = [tick for tick in ticks if 0 <= tick <= 1]
         axis.set_xticks(ticks)
-        axis.set_xlim(0, max(peak, ticks[-1]) * 1.55)
+        axis.set_xlim(0, max(peak, ticks[-1]) * 1.8)
         axis.xaxis.set_major_formatter(PercentFormatter(1))
         axis.set_axisbelow(True)
         axis.grid(axis="x", color="#e6e9ec", linewidth=0.6)
@@ -97,7 +117,7 @@ def render_results(path):
         row["disagreement_ratio"] = (
             (row["group_3_added"] + row["group_2_deleted"]) / denominator if denominator else None
         )
-    rows.sort(key=lambda row: (-(row["group_2_deleted"] + row["group_3_added"]), row["term"]))
+    rows.sort(key=lambda row: _TERM_ORDER[row["term"]])
     cohorts = {cohort: [row for row in rows if row["cohort"] == cohort] for cohort in ("all", "modified")}
     for cohort, cohort_rows in cohorts.items():
         if not cohort_rows:
