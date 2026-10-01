@@ -1,6 +1,6 @@
 # # ## HEEDB
-uv run python src/ecg_data/preprocess/preprocess_base.py \
---config src/ecg_data/preprocess/config/heedb.yaml
+# uv run python src/ecg_data/preprocess/preprocess_base.py \
+# --config src/ecg_data/preprocess/config/heedb.yaml
 
 
 # AGH
@@ -20,3 +20,8 @@ uv run python src/ecg_data/preprocess/preprocess_base.py \
 # EchoNext
 # uv run python src/ecg_data/preprocess/preprocess_base.py \
 # --config src/ecg_data/preprocess/config/echonext.yaml
+
+
+# Code15
+uv run python src/ecg_data/preprocess/preprocess_base.py \
+--config src/ecg_data/preprocess/config/code15.yaml

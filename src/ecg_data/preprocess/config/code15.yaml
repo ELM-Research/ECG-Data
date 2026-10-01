@@ -2,3 +2,5 @@ defaults:
   - ./common.yaml
 
 data_name: code15
+save_path: /p01/whan/data/code15/preprocessed_250_10
+data_root_path: /p01/whan/data/code15
