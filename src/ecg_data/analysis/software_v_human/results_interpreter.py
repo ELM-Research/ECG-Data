@@ -3,11 +3,9 @@ import csv
 import json
 from pathlib import Path
 import re
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib.figure import Figure
-from matplotlib.ticker import MaxNLocator, PercentFormatter
 
 from ecg_data.analysis.software_v_human.terms import TERMS
+from ecg_data.analysis.software_v_human.inspection import print_examples
 
 GROUPS = ("group_1_retained", "group_2_deleted", "group_3_added", "group_4_never_present")
 _TERM_ORDER = {term: index for index, term in enumerate(term for terms in TERMS.values() for term in terms)}
@@ -42,6 +40,10 @@ METRICS = {
 
 
 def plot_changes(path, summary, rows, title, metric="edits", *, cohort="modified", sharex=False):
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+    from matplotlib.ticker import MaxNLocator, PercentFormatter
+
     metrics = METRICS[metric]
     count = summary["analyzed_reports"] if cohort == "all" else summary[f"{cohort}_reports"]
     cohort_label = "all analyzed" if cohort == "all" else cohort
@@ -155,13 +157,25 @@ if __name__ == "__main__":
         "paths", nargs="*", type=Path, default=[Path(__file__).parent / "results"],
         help="Comparison directories or a parent containing them (default: results beside this script).",
     )
+    parser.add_argument(
+        "--inspect-removed-terms", nargs="+",
+        help="Print saved report pairs for these terms instead of rendering plots.",
+    )
+    parser.add_argument("--inspect-limit", type=int, default=3, help="Maximum pairs per term (default: 3).")
     args = parser.parse_args()
+    if args.inspect_removed_terms and args.inspect_limit < 1:
+        parser.error("--inspect-limit must be at least 1.")
+    filename = "removed_examples.jsonl" if args.inspect_removed_terms else "changes.csv"
     for path in args.paths:
-        directories = [path] if (path / "changes.csv").is_file() else sorted(
-            file.parent for file in path.glob("*/changes.csv")
+        directories = [path] if (path / filename).is_file() else sorted(
+            file.parent for file in path.glob(f"*/{filename}")
         )
         if not directories:
-            parser.error(f"No changes.csv found in {path} or its immediate subdirectories.")
+            parser.error(f"No {filename} found in {path} or its immediate subdirectories.")
         for directory in directories:
+            if args.inspect_removed_terms:
+                print(f"\n{directory.name}")
+                print_examples(directory / filename, args.inspect_removed_terms, args.inspect_limit)
+                continue
             render_results(directory)
             print(f"Saved all three analyses: {directory}")

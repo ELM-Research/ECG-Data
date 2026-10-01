@@ -73,6 +73,39 @@ Undefined ratios are blank in CSV, `null` in JSON, and `n/a` in charts.
 These three tables replace the wide `terms.csv`; every previous metric is retained.
 Old output files are not removed. Use a fresh output directory to avoid mixing runs.
 
+## Inspecting removed terms
+
+Optionally add these settings to the main analysis configuration:
+
+```yaml
+inspect_comparison: heedb_new
+inspect_removed_terms:
+  - sinus rhythm
+  - left axis deviation
+```
+
+The normal analysis also writes `heedb_new/removed_examples.jsonl`: one record
+per matching pair, containing the selected removed terms and both report texts.
+Matching reuses the analysis results. All matching pairs are saved; reports with
+multiple selected removals are stored once. Omit `inspect_removed_terms` to
+disable logging. An enabled run overwrites this file; a disabled run leaves any
+existing file untouched.
+
+Print up to five saved pairs per term without loading the dataset or making plots:
+
+```sh
+uv run python -m ecg_data.analysis.software_v_human.results_interpreter \
+  /path/to/results/heedb_new \
+  --inspect-removed-terms "sinus rhythm" "left axis deviation" \
+  --inspect-limit 5
+```
+
+Only terms selected during logging have records. Examples follow worker completion
+order, so the subset may differ between analysis runs. `inspect_limit` in the main
+configuration is no longer used; choose N with `--inspect-limit` when printing.
+The temporary helpers live in `inspection.py`; the analysis and results interpreter
+only wrap their existing paths to call them.
+
 ## Disagreement across all reports
 
 The same `results_interpreter` command also writes `all_reports/disagreement.csv`,
