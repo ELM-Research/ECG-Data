@@ -92,6 +92,50 @@ def read_reports(data_path, data_name):
     raise ValueError(f"Unknown dataset: {data_name}")
 
 
+def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3):
+    """Development helper: print removal pairs and full-scan modified-cohort counts."""
+    terms = dict.fromkeys(normalize_text(term) for term in terms)
+    unknown = terms.keys() - PATTERNS.keys()
+    if unknown or not terms:
+        raise ValueError(f"Provide terms from TERMS; unknown terms: {sorted(unknown)}")
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
+    counts = {term: {"removed": 0, "eligible": 0} for term in terms}
+    scanned = 0
+
+    for report in reports:
+        if report[0] != comparison:
+            continue
+        scanned += 1
+        _, cohort, matches = process_report(report)
+        if cohort != "modified":
+            continue
+
+        for _, term, before, after in matches:
+            if term not in counts or not before:
+                continue
+            row = counts[term]
+            row["eligible"] += 1
+            if after:
+                continue
+            row["removed"] += 1
+            if row["removed"] > limit:
+                continue
+
+            print(f"\n{term} | {comparison} pair {scanned}")
+            for label, text in (("Software", report[1]), ("Physician", report[2])):
+                if isinstance(text, list):
+                    text = " ".join(text)
+                print(f"{label}: {text}")
+
+    if not scanned:
+        raise ValueError(f"No report pairs found for {comparison}.")
+    print(f"\nScanned {scanned} {comparison} pairs. Counts use modified reports.")
+    for term, row in counts.items():
+        print(f"{term}: {row['removed']} / {row['eligible']} removed by physician")
+    return counts
+
+
 def save_results(path, summary, rows):
     (path / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
@@ -220,6 +264,14 @@ def analyze(reports, save_path):
 
 if __name__ == "__main__":
     cfg = get_config()
+
+    if cfg.get("inspect_removed_terms"):
+        inspect_removed_reports(
+            read_reports(cfg["data_path"], cfg["data_name"]), cfg["inspect_removed_terms"],
+            comparison=cfg.get("inspect_comparison", "heedb_new"),
+            limit=cfg.get("inspect_limit", 3),
+        )
+        raise SystemExit(0)
 
     with Pool() as pool:
         reports = pool.imap_unordered(
