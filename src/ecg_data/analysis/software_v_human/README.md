@@ -31,7 +31,7 @@ Each comparison writes these files under `save_path`:
 
 | File | Contents |
 | --- | --- |
-| `overview.png` | Terms with edits, ranked by edit count: addition and deletion percentages, with N beside each bar. |
+| `overview.png` | Terms with edits: addition and deletion percentages, with numerator / denominator beside each bar. |
 | `terms_<category>.png` | All 69 terms, grouped by category, using the same two plots. |
 | `overview_error_rates.png`, `terms_<category>_error_rates.png` | The same plots using false negative and false positive rates. |
 | `all_reports/` | Shared-denominator disagreement plots and `disagreement.csv`, including unchanged reports. |
@@ -42,9 +42,11 @@ Each comparison writes these files under `save_path`:
 
 The addition/deletion and error-rate figures use **modified reports only**, as in
 the paper's term-change analysis. The `all_reports/` figures use **all reports**.
-The overview ranks terms by added + deleted reports, not net change or percentage.
+All figures follow the category and term order in `terms.py` (Supplemental Table S1),
+consistently across comparisons and interpretations. Overviews omit terms without edits.
 The category plots include unobserved terms.
-Bar height shows the percentage; **N** is the number of reports with that edit.
+Bar length shows the percentage; labels show **percentage (edited / eligible reports)**.
+For example, `25.0% (5 / 20)` means 5 edits among 20 eligible reports.
 Addition percentages use originally absent reports; deletion percentages use
 originally present reports. Both use the modified cohort only.
 
@@ -88,7 +90,7 @@ size (`report_count`), and the shared denominator (`either_report_count`).
 
 The two plots share an axis scale and show missed and extra percentages;
 their sum is total disagreement.
-The overview ranks by addition + deletion count; category plots include all terms.
+The overview uses the same fixed term order; category plots include all terms.
 Zero denominators produce blank CSV ratios and `n/a` in category plots.
 These are not standard false negative and false positive rates. They match the
 previous script's per-term bar denominators, while retaining current phrase matching
