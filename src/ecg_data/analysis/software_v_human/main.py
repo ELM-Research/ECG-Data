@@ -1,6 +1,7 @@
 import csv
 import json
 import re
+from functools import partial
 from pathlib import Path
 from tqdm import tqdm
 from multiprocessing import Pool
@@ -8,6 +9,9 @@ from multiprocessing import Pool
 import numpy as np
 
 from ecg_data.analysis.software_v_human.terms import TERMS
+from ecg_data.analysis.software_v_human.inspection import (
+    process_with_examples, save_examples, validate_terms,
+)
 from ecg_data.preprocess.config.load import get_config
 
 
@@ -90,58 +94,6 @@ def read_reports(data_path, data_name):
         return
 
     raise ValueError(f"Unknown dataset: {data_name}")
-
-
-def _inspect_report(report):
-    return report, process_report(report)
-
-
-def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3, workers=None, total=None):
-    """Match reports in processes, then print counts and examples grouped by term."""
-    terms = dict.fromkeys(normalize_text(term) for term in terms)
-    unknown = terms.keys() - PATTERNS.keys()
-    if unknown or not terms:
-        raise ValueError(f"Provide terms from TERMS; unknown terms: {sorted(unknown)}")
-    if limit < 1:
-        raise ValueError("limit must be at least 1.")
-    counts = {term: {"removed": 0, "eligible": 0} for term in terms}
-    examples = {term: [] for term in terms}
-    scanned = 0
-    modified = 0
-    reports = (report for report in reports if report[0] == comparison)
-    with Pool(processes=workers) as pool:
-        results = pool.imap(_inspect_report, reports, chunksize=100)
-        bar = tqdm(results, total=total, desc=f"Inspecting {comparison}", unit="report")
-        for report, (_, cohort, matches) in bar:
-            scanned += 1
-            if cohort == "modified":
-                modified += 1
-                for _, term, before, after in matches:
-                    if term not in counts or not before:
-                        continue
-                    row = counts[term]
-                    row["eligible"] += 1
-                    if after:
-                        continue
-                    row["removed"] += 1
-                    if row["removed"] <= limit:
-                        examples[term].append((scanned, report[1], report[2]))
-            bar.set_postfix(scanned=scanned, modified=modified, refresh=False)
-        bar.close()
-    if not scanned:
-        raise ValueError(f"No report pairs found for {comparison}.")
-    print(f"\nScanned {scanned} {comparison} pairs. Counts use modified reports.")
-    for term, row in counts.items():
-        print(f"\n{term}: {row['removed']} / {row['eligible']} removed by physician")
-        if not examples[term]:
-            print("No removal examples.")
-        for index, original, final in examples[term]:
-            print(f"  Pair {index}")
-            for label, text in (("Software", original), ("Physician", final)):
-                if isinstance(text, list):
-                    text = " ".join(text)
-                print(f"  {label}: {text}")
-    return counts
 
 
 def save_results(path, summary, rows):
@@ -273,22 +225,23 @@ def analyze(reports, save_path):
 if __name__ == "__main__":
     cfg = get_config()
 
-    if cfg.get("inspect_removed_terms"):
-        total = sum(1 for _ in Path(cfg["data_path"]).glob("*/*.npy"))
-        inspect_removed_reports(
-            read_reports(cfg["data_path"], cfg["data_name"]), cfg["inspect_removed_terms"],
-            comparison=cfg.get("inspect_comparison", "heedb_new"),
-            limit=cfg.get("inspect_limit", 3),
-            workers=cfg.get("num_cores"),
-            total=total
+    processor = process_report
+    terms = cfg.get("inspect_removed_terms")
+    comparison = cfg.get("inspect_comparison", "heedb_new")
+    if terms:
+        processor = partial(
+            process_with_examples, processor=process_report,
+            terms=validate_terms(terms), comparison=comparison,
         )
-        raise SystemExit(0)
 
     with Pool() as pool:
         reports = pool.imap_unordered(
-            process_report,
+            processor,
             read_reports(cfg["data_path"], cfg["data_name"]),
             chunksize=100,
         )
+        if terms:
+            path = Path(cfg["save_path"]) / comparison / "removed_examples.jsonl"
+            reports = save_examples(reports, path)
         analyze(tqdm(reports, desc = f"Analyzing {cfg['data_name']}", unit = "report"),
                 cfg["save_path"])
