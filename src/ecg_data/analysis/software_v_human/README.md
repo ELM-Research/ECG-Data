@@ -91,20 +91,21 @@ multiple selected removals are stored once. Omit `inspect_removed_terms` to
 disable logging. An enabled run overwrites this file; a disabled run leaves any
 existing file untouched.
 
-Print up to five saved pairs per term without loading the dataset or making plots:
+Print up to five pairs for every term found in the saved records:
 
 ```sh
-uv run python -m ecg_data.analysis.software_v_human.results_interpreter \
+uv run python -m ecg_data.analysis.software_v_human.inspection \
   /path/to/results/heedb_new \
-  --inspect-removed-terms "sinus rhythm" "left axis deviation" \
-  --inspect-limit 5
+  --limit 5
 ```
 
-Only terms selected during logging have records. Examples follow worker completion
-order, so the subset may differ between analysis runs. `inspect_limit` in the main
-configuration is no longer used; choose N with `--inspect-limit` when printing.
-The temporary helpers live in `inspection.py`; the analysis and results interpreter
-only wrap their existing paths to call them.
+The path can also point directly to `removed_examples.jsonl`. No term list is
+needed when printing; only terms selected during logging have records. Examples
+follow worker completion order, so the subset may differ between analysis runs.
+Choose N with `--limit`; `inspect_limit` in the main configuration is unused.
+The temporary logging and printing helpers live in `inspection.py`.
+`results_interpreter.py` has no inspection dependency. To remove inspection,
+delete `inspection.py` and its optional logging hooks in `main.py`.
 
 ## Disagreement across all reports
 
