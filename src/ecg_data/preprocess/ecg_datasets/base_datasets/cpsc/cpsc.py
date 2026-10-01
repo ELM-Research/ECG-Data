@@ -12,7 +12,7 @@ class CPSC:
         self.data_root_path = data_root_path
 
     def prepare_df(self, ):
-        hf_dataset = load_dataset("PULSE-ECG/ECGBench", name="cpsc-test", streaming=False, cache_dir="./../.huggingface")
+        hf_dataset = load_dataset("PULSE-ECG/ECGBench", name="cpsc-test", streaming=False)
         cpsc_paths = glob.glob(f"{self.data_root_path}/training/*/*/*.hea")
         cpsc_filename_to_path = {os.path.basename(path).split(".")[0]: path.replace(".hea", "") for path in cpsc_paths}
         df = pd.DataFrame([])

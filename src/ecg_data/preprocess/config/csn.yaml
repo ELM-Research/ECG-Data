@@ -2,3 +2,5 @@ defaults:
   - ./common.yaml
 
 data_name: csn
+save_path: /p01/whan/data/csn/preprocessed_250_10
+data_root_path: /p01/whan/data/csn
