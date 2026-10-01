@@ -92,8 +92,12 @@ def read_reports(data_path, data_name):
     raise ValueError(f"Unknown dataset: {data_name}")
 
 
-def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3):
-    """Development helper: print removal pairs and full-scan modified-cohort counts."""
+def _inspect_report(report):
+    return report, process_report(report)
+
+
+def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3, workers=None):
+    """Match reports in processes, then print counts and examples grouped by term."""
     terms = dict.fromkeys(normalize_text(term) for term in terms)
     unknown = terms.keys() - PATTERNS.keys()
     if unknown or not terms:
@@ -101,38 +105,40 @@ def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3):
     if limit < 1:
         raise ValueError("limit must be at least 1.")
     counts = {term: {"removed": 0, "eligible": 0} for term in terms}
+    examples = {term: [] for term in terms}
     scanned = 0
 
-    for report in reports:
-        if report[0] != comparison:
-            continue
-        scanned += 1
-        _, cohort, matches = process_report(report)
-        if cohort != "modified":
-            continue
-
-        for _, term, before, after in matches:
-            if term not in counts or not before:
-                continue
-            row = counts[term]
-            row["eligible"] += 1
-            if after:
-                continue
-            row["removed"] += 1
-            if row["removed"] > limit:
+    reports = (report for report in reports if report[0] == comparison)
+    with Pool(processes=workers) as pool:
+        for report, (_, cohort, matches) in pool.imap(_inspect_report, reports, chunksize=100):
+            scanned += 1
+            if cohort != "modified":
                 continue
 
-            print(f"\n{term} | {comparison} pair {scanned}")
-            for label, text in (("Software", report[1]), ("Physician", report[2])):
-                if isinstance(text, list):
-                    text = " ".join(text)
-                print(f"{label}: {text}")
+            for _, term, before, after in matches:
+                if term not in counts or not before:
+                    continue
+                row = counts[term]
+                row["eligible"] += 1
+                if after:
+                    continue
+                row["removed"] += 1
+                if row["removed"] <= limit:
+                    examples[term].append((scanned, report[1], report[2]))
 
     if not scanned:
         raise ValueError(f"No report pairs found for {comparison}.")
     print(f"\nScanned {scanned} {comparison} pairs. Counts use modified reports.")
     for term, row in counts.items():
-        print(f"{term}: {row['removed']} / {row['eligible']} removed by physician")
+        print(f"\n{term}: {row['removed']} / {row['eligible']} removed by physician")
+        if not examples[term]:
+            print("No removal examples.")
+        for index, original, final in examples[term]:
+            print(f"  Pair {index}")
+            for label, text in (("Software", original), ("Physician", final)):
+                if isinstance(text, list):
+                    text = " ".join(text)
+                print(f"  {label}: {text}")
     return counts
 
 
@@ -270,6 +276,7 @@ if __name__ == "__main__":
             read_reports(cfg["data_path"], cfg["data_name"]), cfg["inspect_removed_terms"],
             comparison=cfg.get("inspect_comparison", "heedb_new"),
             limit=cfg.get("inspect_limit", 3),
+            workers=cfg.get("num_cores"),
         )
         raise SystemExit(0)
 
