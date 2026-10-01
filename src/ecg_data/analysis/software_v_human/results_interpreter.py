@@ -92,7 +92,6 @@ def render_results(path):
             filename = re.sub(r"[^a-z0-9]+", "_", category.lower()).strip("_")
             figure.savefig(path / f"terms_{filename}{suffix}.png", dpi=180)
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
