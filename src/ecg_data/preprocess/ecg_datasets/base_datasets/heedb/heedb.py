@@ -14,9 +14,9 @@ class HEEDB:
     def open_data(self, row):
         ecg, fields = open_wfdb(row["path"])
         ecg = ecg.T  # WFDB returns (time, lead) --> (lead, time).
-        reports_physician = self.map_codes(row["codes_physician"])
-        reports_software_old = self.map_codes(row["codes_software_old"])
-        reports_software_new = self.map_codes(row["codes_software_new"])
+        clean_codes_physician, reports_physician = self.map_codes(row["codes_physician"])
+        clean_codes_software_old, reports_software_old = self.map_codes(row["codes_software_old"])
+        clean_codes_software_new, reports_software_new = self.map_codes(row["codes_software_new"])
         if any(not code_list for code_list in (reports_physician, reports_software_old, reports_software_new)):
             return None
         return {"file_path": row["path"], "ecg" : ecg,
@@ -25,13 +25,17 @@ class HEEDB:
                 "reports_physician": reports_physician, # here reports are a list of strings
                 "reports_software_old": reports_software_old,
                 "reports_software_new": reports_software_new,
-                "codes_physician": row["codes_physician"],
-                "codes_software_old": row["codes_software_old"],
-                "codes_software_new": row["codes_software_new"],
+                "codes_physician": clean_codes_physician,
+                "codes_software_old": clean_codes_software_old,
+                "codes_software_new": clean_codes_software_new,
                 "current_order": fields["sig_name"]}
 
+    def clean_codes(self, codes):
+        return list(dict.fromkeys(int(c) for c in str(codes).split(",")))
+
     def map_codes(self, codes):
-        return [self.code_to_diagnosis[int(c)] for c in str(codes).split(",") if int(c) in self.code_to_diagnosis]
+        clean_codes = self.clean_codes(codes)
+        return clean_codes, [self.code_to_diagnosis[c] for c in clean_codes if c in self.code_to_diagnosis]
 
     def prepare_df(self,):
         cols = ["path", "ECGAcquisitionTime", "codes_physician", "codes_software_old", "codes_software_new"]

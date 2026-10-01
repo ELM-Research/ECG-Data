@@ -11,4 +11,4 @@
 
 # uv run python src/ecg_data/analysis/software_v_human/results_interpreter.py src/ecg_data/analysis/software_v_human/results/heedb_old
 
-uv run python src/ecg_data/analysis/software_v_human/inspection.py src/ecg_data/analysis/software_v_human/results/heedb_new --limit 5
+# uv run python src/ecg_data/analysis/software_v_human/inspection.py src/ecg_data/analysis/software_v_human/results/heedb_new --limit 5
