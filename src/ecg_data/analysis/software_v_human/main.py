@@ -96,7 +96,7 @@ def _inspect_report(report):
     return report, process_report(report)
 
 
-def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3, workers=None):
+def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3, workers=None, total=None):
     """Match reports in processes, then print counts and examples grouped by term."""
     terms = dict.fromkeys(normalize_text(term) for term in terms)
     unknown = terms.keys() - PATTERNS.keys()
@@ -111,28 +111,23 @@ def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3, 
     reports = (report for report in reports if report[0] == comparison)
     with Pool(processes=workers) as pool:
         results = pool.imap(_inspect_report, reports, chunksize=100)
-        bar = tqdm(results, desc=f"Inspecting {comparison}", unit="report")
+        bar = tqdm(results, total=total, desc=f"Inspecting {comparison}", unit="report")
         for report, (_, cohort, matches) in bar:
             scanned += 1
-            if cohort != "modified":
-                continue
-            modified += 1
-            for _, term, before, after in matches:
-                if term not in counts or not before:
-                    continue
-                row = counts[term]
-                row["eligible"] += 1
-                if after:
-                    continue
-                row["removed"] += 1
-                if row["removed"] <= limit:
-                    examples[term].append((scanned, report[1], report[2]))
-            if modified % 200 == 0:
-                bar.set_postfix(
-                    modified=modified,
-                    removed=sum(row["removed"] for row in counts.values()),
-                    refresh=False,
-                )
+            if cohort == "modified":
+                modified += 1
+                for _, term, before, after in matches:
+                    if term not in counts or not before:
+                        continue
+                    row = counts[term]
+                    row["eligible"] += 1
+                    if after:
+                        continue
+                    row["removed"] += 1
+                    if row["removed"] <= limit:
+                        examples[term].append((scanned, report[1], report[2]))
+            bar.set_postfix(scanned=scanned, modified=modified, refresh=False)
+        bar.close()
     if not scanned:
         raise ValueError(f"No report pairs found for {comparison}.")
     print(f"\nScanned {scanned} {comparison} pairs. Counts use modified reports.")
@@ -279,11 +274,13 @@ if __name__ == "__main__":
     cfg = get_config()
 
     if cfg.get("inspect_removed_terms"):
+        total = sum(1 for _ in Path(cfg["data_path"]).glob("*/*.npy"))
         inspect_removed_reports(
             read_reports(cfg["data_path"], cfg["data_name"]), cfg["inspect_removed_terms"],
             comparison=cfg.get("inspect_comparison", "heedb_new"),
             limit=cfg.get("inspect_limit", 3),
             workers=cfg.get("num_cores"),
+            total=total
         )
         raise SystemExit(0)
 
