@@ -107,14 +107,16 @@ def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3, 
     counts = {term: {"removed": 0, "eligible": 0} for term in terms}
     examples = {term: [] for term in terms}
     scanned = 0
-
+    modified = 0
     reports = (report for report in reports if report[0] == comparison)
     with Pool(processes=workers) as pool:
-        for report, (_, cohort, matches) in pool.imap(_inspect_report, reports, chunksize=100):
+        results = pool.imap(_inspect_report, reports, chunksize=100)
+        bar = tqdm(results, desc=f"Inspecting {comparison}", unit="report")
+        for report, (_, cohort, matches) in bar:
             scanned += 1
             if cohort != "modified":
                 continue
-
+            modified += 1
             for _, term, before, after in matches:
                 if term not in counts or not before:
                     continue
@@ -125,7 +127,12 @@ def inspect_removed_reports(reports, terms, *, comparison="heedb_new", limit=3, 
                 row["removed"] += 1
                 if row["removed"] <= limit:
                     examples[term].append((scanned, report[1], report[2]))
-
+            if modified % 200 == 0:
+                bar.set_postfix(
+                    modified=modified,
+                    removed=sum(row["removed"] for row in counts.values()),
+                    refresh=False,
+                )
     if not scanned:
         raise ValueError(f"No report pairs found for {comparison}.")
     print(f"\nScanned {scanned} {comparison} pairs. Counts use modified reports.")
