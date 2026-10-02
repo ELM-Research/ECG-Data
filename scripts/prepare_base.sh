@@ -33,5 +33,9 @@
 
 
 # CSN
+# uv run python src/ecg_data/preprocess/preprocess_base.py \
+# --config src/ecg_data/preprocess/config/csn.yaml
+
+# CSN
 uv run python src/ecg_data/preprocess/preprocess_base.py \
---config src/ecg_data/preprocess/config/csn.yaml
+--config src/ecg_data/preprocess/config/agh.yaml
