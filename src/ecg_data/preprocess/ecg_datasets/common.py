@@ -6,6 +6,7 @@ from pathlib import Path
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator, MaxNLocator
+from ecg_data.preprocess.ecg_datasets.base_datasets.base import PTB_ORDER
 
 def get_dataset_module(data_name: str, data_root_path: str, package: str):
     module = import_module(f"{package}.{data_name}.{data_name}")
@@ -15,8 +16,6 @@ def get_dataset_module(data_name: str, data_root_path: str, package: str):
 def open_wfdb(path: str):
     signal, fields = wfdb.rdsamp(path)
     return signal, fields
-
-PTB_ORDER = ["I", "II", "III", "aVL", "aVR", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
 
 def plot_ecg(ecg, seconds=10, fs=250, output="ecg", figsize=(12, 9), linewidth=1.0):
     """Save a (12, samples) ECG in PTB_ORDER as PNG and PDF.

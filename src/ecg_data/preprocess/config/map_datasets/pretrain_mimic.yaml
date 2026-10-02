@@ -1,0 +1,4 @@
+defaults:
+  - ./common.yaml
+
+data_name: pretrain_mimic

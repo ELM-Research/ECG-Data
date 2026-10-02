@@ -35,7 +35,3 @@
 # CSN
 # uv run python src/ecg_data/preprocess/preprocess_base.py \
 # --config src/ecg_data/preprocess/config/base_datasets/csn.yaml
-
-# CSN
-uv run python src/ecg_data/preprocess/preprocess_base.py \
---config src/ecg_data/preprocess/config/base_datasets/agh.yaml
