@@ -5,9 +5,7 @@ from fractions import Fraction
 from multiprocessing import Pool
 from scipy.signal import resample_poly
 from pathlib import Path
-from ecg_data.preprocess.ecg_datasets.common import get_dataset_module
-
-PTB_ORDER = ['I', 'II', 'III', 'AVR', 'AVL', 'AVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
+from ecg_data.preprocess.ecg_datasets.common import get_dataset_module, PTB_ORDER
 
 class BaseDataset:
     def __init__(self, dataset_module,

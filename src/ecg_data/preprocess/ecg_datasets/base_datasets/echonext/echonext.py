@@ -1,8 +1,6 @@
 import numpy as np
 import pandas as pd
 
-from ecg_data.preprocess.ecg_datasets.base_datasets.base import PTB_ORDER
-
 LABEL_TO_STATEMENT = {
     "lvef_lte_45_flag": "Left ventricular systolic dysfunction",
     "lvwt_gte_13_flag": "Left ventricular hypertrophy",

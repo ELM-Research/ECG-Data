@@ -1,3 +1,4 @@
+import re
 import json
 import wfdb
 import matplotlib
@@ -6,7 +7,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from importlib import import_module
 from matplotlib.ticker import AutoMinorLocator, MaxNLocator
-# from ecg_data.preprocess.ecg_datasets.base_datasets.base import PTB_ORDER
+PTB_ORDER = ['I', 'II', 'III', 'AVR', 'AVL', 'AVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
 
 matplotlib.use("Agg")
 
@@ -80,3 +81,17 @@ def plot_ecg(ecg, seconds=10, fs=250, output="ecg", figsize=(12, 9), linewidth=1
 def open_json(path) -> dict:
     with open(path) as f:
         return json.load(f)
+
+REMOVE = ["<ecg>", "\n<ecg>", "<image>"]
+def exact_string_removal(text: str, role: str):
+    pattern = re.compile("|".join(map(re.escape, REMOVE)), re.IGNORECASE)
+    return pattern.sub("", text)
+
+def ecg_placeholder_injection(text: str, role: str):
+    if role in ["gpt", "assistant"]:
+        return f"<ecg>\n{text}"
+    return text
+
+def append_jsonl(jsonl_path, instance):
+    with open(jsonl_path, "a", encoding = "utf-8") as f:
+        f.write(json.dumps(instance, ensure_ascii=False) + "\n")

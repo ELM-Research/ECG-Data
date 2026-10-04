@@ -5,5 +5,4 @@ if __name__ == "__main__":
     cfg = get_config()
     print(cfg)
     map_dataset = build_map_dataset(cfg)
-    map_dict = map_dataset.prepare_map_dict()
-    map_dataset.create_dataset(map_dict)
+    map_dataset.create_dataset()
