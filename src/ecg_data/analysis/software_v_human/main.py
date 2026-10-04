@@ -1,10 +1,12 @@
 import csv
 import json
 import re
+from collections import Counter
 from functools import partial
 from pathlib import Path
 from tqdm import tqdm
 from multiprocessing import Pool
+from uuid import uuid4
 
 import numpy as np
 
@@ -37,6 +39,7 @@ TABLES = {
     ),
 }
 
+MATCHING_MODES = ("exact_statement", "phrase")
 PATTERNS = {
     term: re.compile(rf"\b{re.escape(term)}\b")
     for terms in TERMS.values()
@@ -48,30 +51,46 @@ def normalize_text(report):
     return " ".join(report.lower().split())
 
 
+def _statement_counts(report):
+    statements = report if isinstance(report, list) else report.splitlines()
+    return Counter(normalize_text(statement) for statement in statements if statement.strip())
+
+
+def _term_counts(report, matching):
+    if matching == "exact_statement":
+        return _statement_counts(report)
+    if matching == "phrase":
+        text = normalize_text(" ".join(report) if isinstance(report, list) else report)
+        return {term: len(pattern.findall(text)) for term, pattern in PATTERNS.items()}
+    raise ValueError(f"Unknown matching mode: {matching}")
+
+
 def process_report(report):
-    name, original, final = report
+    name, matching, original, final = report
     if original is None or final is None:
-        return name, None, None
+        return name, matching, None, None
 
     # Compare complete text before normalizing case and whitespace.
-    if isinstance(original, list):
-        original = " ".join(original)
-    if isinstance(final, list):
-        final = " ".join(final)
-
-    cohort = "unchanged" if original == final else "modified"
-    original, final = normalize_text(original), normalize_text(final)
+    original_text = " ".join(original) if isinstance(original, list) else original
+    final_text = " ".join(final) if isinstance(final, list) else final
+    cohort = "unchanged" if original_text == final_text else "modified"
+    original, final = _term_counts(original, matching), _term_counts(final, matching)
     matches = []
 
     for category, terms in TERMS.items():
         for term in terms:
-            before = len(PATTERNS[term].findall(original))
-            after = len(PATTERNS[term].findall(final))
+            before, after = original[term], final[term]
             if not before and not after:
                 continue
             matches.append((category, term, before, after))
 
-    return name, cohort, matches
+    return name, matching, cohort, matches
+
+
+def _matching_reports(reports):
+    for name, original, final in reports:
+        for matching in MATCHING_MODES:
+            yield name, matching, original, final
 
 
 def read_reports(data_path, data_name):
@@ -110,23 +129,34 @@ def save_results(path, summary, rows):
 def analyze(reports, save_path):
     summaries = {}
     rows = {}
+    run_id = uuid4().hex
 
-    for name, cohort, matches in reports:
-        if name not in summaries:
-            summaries[name] = {
+    for name, matching, cohort, matches in reports:
+        comparison = (name, matching)
+        if comparison not in summaries:
+            summaries[comparison] = {
+                "comparison": name,
+                "term_matching": matching,
+                "run_id": run_id,
                 "total_reports": 0,
                 "analyzed_reports": 0,
                 "excluded_reports": 0,
                 "reports_without_listed_terms": 0,
                 "unchanged_reports": 0,
                 "modified_reports": 0,
+                "term_change_reports": {
+                    "no_term_change": 0,
+                    "addition_only": 0,
+                    "deletion_only": 0,
+                    "both": 0,
+                },
             }
 
             # Include every term, even when it never appears in a cohort.
             for group in ("all", "unchanged", "modified"):
                 for category, terms in TERMS.items():
                     for term in terms:
-                        rows[(name, group, term)] = {
+                        rows[(comparison, group, term)] = {
                             "cohort": group,
                             "category": category,
                             "term": term,
@@ -139,7 +169,7 @@ def analyze(reports, save_path):
                             "group_3_added": 0,
                         }
 
-        summary = summaries[name]
+        summary = summaries[comparison]
         summary["total_reports"] += 1
 
         if matches is None:
@@ -153,9 +183,21 @@ def analyze(reports, save_path):
         summary["analyzed_reports"] += 1
         summary[f"{cohort}_reports"] += 1
 
+        added = any(not before and after for _, _, before, after in matches)
+        deleted = any(before and not after for _, _, before, after in matches)
+        if added and deleted:
+            change = "both"
+        elif added:
+            change = "addition_only"
+        elif deleted:
+            change = "deletion_only"
+        else:
+            change = "no_term_change"
+        summary["term_change_reports"][change] += 1
+
         for category, term, before, after in matches:
             for group in ("all", cohort):
-                row = rows[(name, group, term)]
+                row = rows[(comparison, group, term)]
                 row["original_term_frequency"] += before
                 row["original_report_count"] += int(before > 0)
                 row["final_term_frequency"] += after
@@ -171,7 +213,8 @@ def analyze(reports, save_path):
     if not summaries:
         raise ValueError("No reports found.")
 
-    for name, summary in summaries.items():
+    for comparison, summary in summaries.items():
+        name, matching = comparison
         total = summary["analyzed_reports"]
         summary["skipped_reports"] = summary["excluded_reports"]
         summary["unchanged_proportion"] = (
@@ -182,8 +225,8 @@ def analyze(reports, save_path):
         )
 
         result = []
-        for (comparison, cohort, term), row in rows.items():
-            if comparison != name:
+        for (row_comparison, cohort, term), row in rows.items():
+            if row_comparison != comparison:
                 continue
 
             count = total if cohort == "all" else summary[f"{cohort}_reports"]
@@ -209,13 +252,13 @@ def analyze(reports, save_path):
             )
             result.append(row)
 
-        path = Path(save_path) / name
+        path = Path(save_path) / name / matching
         path.mkdir(parents=True, exist_ok=True)
 
         save_results(path, summary, result)
 
         print(
-            f"{name}: {total} analyzed, "
+            f"{name}/{matching}: {total} analyzed, "
             f"{summary['excluded_reports']} excluded for missing reports "
             f"({summary['reports_without_listed_terms']} analyzed reports "
             f"contained no listed terms)"
@@ -237,11 +280,11 @@ if __name__ == "__main__":
     with Pool() as pool:
         reports = pool.imap_unordered(
             processor,
-            read_reports(cfg["data_path"], cfg["data_name"]),
+            _matching_reports(read_reports(cfg["data_path"], cfg["data_name"])),
             chunksize=100,
         )
         if terms:
-            path = Path(cfg["save_path"]) / comparison / "removed_examples.jsonl"
+            path = Path(cfg["save_path"]) / comparison
             reports = save_examples(reports, path)
         analyze(tqdm(reports, desc = f"Analyzing {cfg['data_name']}", unit = "report"),
                 cfg["save_path"])

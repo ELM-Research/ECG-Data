@@ -1,6 +1,7 @@
 """Optional removal records for inspecting software/physician report pairs."""
 
 import argparse
+from contextlib import ExitStack
 import json
 from pathlib import Path
 
@@ -18,7 +19,7 @@ def validate_terms(terms):
 
 def process_with_examples(report, *, processor, terms, comparison):
     result = processor(report)
-    name, cohort, matches = result
+    name, matching, cohort, matches = result
     if name != comparison or cohort != "modified":
         return result, None
 
@@ -26,17 +27,22 @@ def process_with_examples(report, *, processor, terms, comparison):
     if not removed:
         return result, None
 
-    _, software, physician = report
+    _, _, software, physician = report
     return result, {"terms": removed, "software": software, "physician": physician}
 
 
 def save_examples(reports, path):
     """Stream records to disk while forwarding normal analysis results."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w") as file:
+    with ExitStack() as stack:
+        files = {}
         for result, record in reports:
+            matching = result[1]
+            if matching not in files:
+                output = path / matching / "removed_examples.jsonl"
+                output.parent.mkdir(parents=True, exist_ok=True)
+                files[matching] = stack.enter_context(output.open("w"))
             if record is not None:
-                file.write(json.dumps(record) + "\n")
+                files[matching].write(json.dumps(record) + "\n")
             yield result
 
 

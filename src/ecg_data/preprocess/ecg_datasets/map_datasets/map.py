@@ -9,7 +9,7 @@ class MapDataset:
         Path(self.save_path).mkdir(parents=True, exist_ok=True)
 
     def create_dataset(self,):
-        return self.dataset_module.prepare_json()
+        return self.dataset_module.prepare_json(save_path=self.save_path)
 
 def build_map_dataset(cfg: dict):
     dataset_module = get_dataset_module(cfg["data_name"],
