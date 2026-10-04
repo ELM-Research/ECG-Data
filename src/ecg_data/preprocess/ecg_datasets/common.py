@@ -1,12 +1,14 @@
+import json
 import wfdb
-import numpy as np
 import matplotlib
-from importlib import import_module
-from pathlib import Path
-matplotlib.use("Agg")
+import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
+from importlib import import_module
 from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 from ecg_data.preprocess.ecg_datasets.base_datasets.base import PTB_ORDER
+
+matplotlib.use("Agg")
 
 def get_dataset_module(data_name: str, data_root_path: str, package: str):
     module = import_module(f"{package}.{data_name}.{data_name}")
@@ -74,3 +76,7 @@ def plot_ecg(ecg, seconds=10, fs=250, output="ecg", figsize=(12, 9), linewidth=1
         fig.savefig(f"{output}.{extension}", dpi=400,
                     bbox_inches="tight", facecolor="white")
     plt.close(fig)
+
+def open_json(path) -> dict:
+    with open(path) as f:
+        return json.load(f)

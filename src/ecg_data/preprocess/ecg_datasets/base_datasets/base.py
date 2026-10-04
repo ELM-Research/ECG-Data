@@ -13,7 +13,7 @@ class BaseDataset:
     def __init__(self, dataset_module,
                  target_sf : int = 250, # Hz
                  segment_length: int = 10, # Seconds
-                 save_path: str = None,
+                 save_path: str | None = None,
                  toy_dataset_fraction: float | None = None,
                  development: bool = False,
                  num_cores: int | None = None,

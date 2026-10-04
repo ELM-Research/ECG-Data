@@ -2,3 +2,5 @@ defaults:
   - ./common.yaml
 
 data_name: pretrain_mimic
+save_path: /p01/whan/data/pretrain_mimic
+data_root_path: /p01/whan/ecg_preprocess/src/ecg_datasets/map/pretrain_mimic

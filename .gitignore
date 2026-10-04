@@ -215,3 +215,5 @@ src/ecg_data/ecg_preprocess/ecg_datasets/base/agh
 src/ecg_data.egg-info
 *agh*
 src/ecg_data/analysis/software_v_human/results/
+*.json
+*.jsonl

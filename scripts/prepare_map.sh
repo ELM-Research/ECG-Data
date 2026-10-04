@@ -2,6 +2,9 @@
 # uv run src/main.py \
 # --map ecg_qa_ptb_xl
 
+uv run python src/ecg_data/preprocess/preprocess_map.py \
+--config src/ecg_data/preprocess/config/map_datasets/pretrain_mimic.yaml
+
 ### ECG QA MIMIC-IV
 # uv run src/main.py \
 # --map ecg_qa_mimic_iv
