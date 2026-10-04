@@ -1,6 +1,5 @@
 from ecg_data.preprocess.ecg_datasets.common import get_dataset_module
 
-
 class MapDataset:
     def __init__(self, dataset_module,
                  save_path: str | None = None,
