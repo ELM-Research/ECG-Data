@@ -17,8 +17,11 @@
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/ecg_qa_cot.yaml
 
+# uv run python src/ecg_data/preprocess/preprocess_map.py \
+# --config src/ecg_data/preprocess/config/map_datasets/ecg_qa.yaml
+
 uv run python src/ecg_data/preprocess/preprocess_map.py \
---config src/ecg_data/preprocess/config/map_datasets/ecg_qa.yaml
+--config src/ecg_data/preprocess/config/map_datasets/ecg_instruct_45k.yaml
 
 ### ECG QA MIMIC-IV
 # uv run src/main.py \
