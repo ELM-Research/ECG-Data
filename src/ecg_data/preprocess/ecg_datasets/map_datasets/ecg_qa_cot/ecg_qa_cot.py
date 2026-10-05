@@ -63,7 +63,7 @@ class ECG_QA_COT:
     def get_ptbxl_ecg_path(self, ecg_id: int) -> str:
         """Get the file path for a PTB-XL ECG record."""
         return os.path.join(
-            "/p01/whan/data/ptb_xl/",
+            "/p01/whan/data/ptb_xl/records500/",
             f"{int(ecg_id / 1000) * 1000:05d}",
             f"{ecg_id:05d}_hr"
         )
