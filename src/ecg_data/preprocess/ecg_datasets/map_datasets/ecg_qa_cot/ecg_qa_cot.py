@@ -50,6 +50,6 @@ class ECG_QA_COT:
                  "value": f"<think>\n{cot}\n</think>\n\n<answer>{answer}</answer>"},]
         return preprocess_conversation(turns)
 
-    def parse_ecg_id(self, ecg_id: str) -> int:
+    def parse_ecg_id(self, ecg_id: str):
         parsed_ecg_id = int(ecg_id.strip("[]"))
         return f"{int(parsed_ecg_id / 1000) * 1000:05d}_{parsed_ecg_id:05d}_hr"

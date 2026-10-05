@@ -1,0 +1,6 @@
+defaults:
+  - ./common.yaml
+
+data_name: ecg_instruct_pulse
+save_path: /p01/whan/data/ecg_instruct_pulse
+data_root_path: /p01/whan/ecg_preprocess/src/ecg_datasets/map/ecg_instruct_pulse
