@@ -82,11 +82,24 @@ def open_json(path) -> dict:
     with open(path) as f:
         return json.load(f)
 
-def exact_string_removal(text: str):
-    return TAG_RE.sub("", text)
+ROLES = {
+    "human": "user", "user": "user", "q": "user",
+    "assistant": "assistant", "gpt": "assistant", "model": "assistant", "a": "assistant",
+    "system": "system",
+}
+TAG_RE = re.compile(r"<\s*(?:ecg|image)\s*>\s*", re.IGNORECASE)
+IMAGE_WORD_RE = re.compile(r"\b(image|picture)\b", re.IGNORECASE)
+
+
+def clean_text(text: str) -> str:
+    text = TAG_RE.sub("", text)
+    return IMAGE_WORD_RE.sub(lambda match: "Signal" if match[1][0].isupper() else "signal", text)
 
 def ecg_placeholder_injection(text: str):
     return f"<ecg>\n{text}"
+
+def preprocess_report(report: list[str]):
+    return ecg_placeholder_injection(clean_text("; ".join(report)))
 
 def preprocess_conversation(turns: list[dict]):
     turns = [
@@ -103,32 +116,3 @@ def preprocess_conversation(turns: list[dict]):
 def append_jsonl(jsonl_path, instance):
     with open(jsonl_path, "a", encoding = "utf-8") as f:
         f.write(json.dumps(instance, ensure_ascii=False) + "\n")
-
-
-ROLES = {
-"human": "user", "user": "user", "q": "user",
-"assistant": "assistant", "gpt": "assistant", "model": "assistant", "a": "assistant",
-"system": "system",
-}
-LEADING_PREFIX_RE = re.compile(
-r"^\s*(?:(?:user|assistant|human|gpt|model|system|q|a)\s*[:：]\s*|[:：]\s*)+",
-re.IGNORECASE,
-)
-TAG_RE = re.compile(r"<\s*(?:ecg|image)\s*>\s*", re.IGNORECASE)
-IMAGE_WORD_RE = re.compile(r"\b(image|picture)\b", re.IGNORECASE)
-
-
-def clean_text(text: str) -> str:
-    text = exact_string_removal(text)
-    return IMAGE_WORD_RE.sub(lambda match: "Signal" if match[1][0].isupper() else "signal", text)
-
-def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str, str]]:
-    normalized = []
-    if system_prompt:
-        normalized.append({"role": "system", "content": system_prompt})
-    for message in text:
-        role = next((message[key] for key in ("role", "from") if key in message), None)
-        content = next((message[key] for key in ("content", "value") if key in message), None)
-        normalized.append({"role": ROLES[role.strip().lower()],
-                           "content": LEADING_PREFIX_RE.sub("", clean_text(content))})
-    return normalized

@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 from multiprocessing import Pool
-from ecg_data.preprocess.ecg_datasets.common import clean_text, ecg_placeholder_injection
+from ecg_data.preprocess.ecg_datasets.common import preprocess_report
 
 class ECHONEXT:
     def __init__(self, data_name: str, data_root_path: str,):
@@ -21,9 +21,5 @@ class ECHONEXT:
     def map_instance(self, instance: Path):
         np_file = np.load(instance, allow_pickle=True).item()
         line = {"ecg_path": str(instance),
-                "text": self.preprocess_report(np_file["reports_physician"])}
+                "text": preprocess_report(np_file["reports_physician"])}
         return json.dumps(line, ensure_ascii=False)
-
-    def preprocess_report(self, report: list):
-        joined_report = "; ".join(report)
-        return ecg_placeholder_injection(clean_text(joined_report))

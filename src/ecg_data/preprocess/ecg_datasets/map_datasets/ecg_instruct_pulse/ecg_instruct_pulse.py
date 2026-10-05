@@ -33,7 +33,7 @@ class ECG_INSTRUCT_PULSE:
                 if not matches:
                     missing += 1
                     continue
-                preprocessed_conversation = self.preprocess_conversation(instance["conversations"])
+                preprocessed_conversation = preprocess_conversation(instance["conversations"])
                 for match in matches:
                     line = {"ecg_path": match,
                             "text": preprocessed_conversation}
@@ -43,9 +43,6 @@ class ECG_INSTRUCT_PULSE:
                     written += 1
         print(f"Write {written} rows; skipped {missing}")
 
-    def preprocess_conversation(self, turns: list[dict]):
-        return preprocess_conversation(turns)
-
     def parse_ecg_id(self, base_data: str):
         base_data_type = base_data.split("/")[0]
         file_name = Path(base_data).stem
@@ -54,4 +51,3 @@ class ECG_INSTRUCT_PULSE:
         elif base_data_type in ["ptb-xl"]:
             subfolder = ecg_id[:2] + "000"
             return f"{subfolder}_{ecg_id}"
-

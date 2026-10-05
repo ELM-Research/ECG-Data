@@ -27,13 +27,10 @@ class PRETRAIN_MIMIC:
                 if not matches:
                     missing += 1
                     continue
-                preprocessed_conversation = self.preprocess_conversation(instance["conversations"])
+                preprocessed_conversation = preprocess_conversation(instance["conversations"])
                 for match in matches:
                     line = {"ecg_path": match,
                             "text": preprocessed_conversation}
                     output.write(json.dumps(line, ensure_ascii=False) + "\n")
                     written += 1
         print(f"Write {written} rows; skipped {missing}")
-
-    def preprocess_conversation(self, turns: list[dict]):
-        return preprocess_conversation(turns)
