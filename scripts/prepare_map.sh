@@ -11,8 +11,11 @@
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/agh.yaml
 
+# uv run python src/ecg_data/preprocess/preprocess_map.py \
+# --config src/ecg_data/preprocess/config/map_datasets/echonext.yaml
+
 uv run python src/ecg_data/preprocess/preprocess_map.py \
---config src/ecg_data/preprocess/config/map_datasets/echonext.yaml
+--config src/ecg_data/preprocess/config/map_datasets/ecg_qa_cot.yaml
 
 ### ECG QA MIMIC-IV
 # uv run src/main.py \

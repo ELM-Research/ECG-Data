@@ -10,12 +10,12 @@ class PRETRAIN_MIMIC:
         self.data_name = data_name
         self.data_root_path = data_root_path
         self.available_ecgs = defaultdict(list)
-        base_data_paths = ["/p01/whan/data/mimic_iv_ecg/preprocessed_250_10"]
-        for base_data in base_data_paths:
+        self.base_data_paths = ["/p01/whan/data/mimic_iv_ecg/preprocessed_250_10"]
+        for base_data in self.base_data_paths:
             for path in Path(base_data).glob("*/*.npy"):
                 # MIMIC-IV-ECG study IDs are unique; BaseDataset appends _<segment>.npy.
-                study_id = path.stem.rsplit("_", 2)[-2]
-                self.available_ecgs[study_id].append(str(path))
+                unique_id = path.stem.rsplit("_", 2)[-2]
+                self.available_ecgs[unique_id].append(str(path))
 
         self.preprocessors = [exact_string_removal,
                               ecg_placeholder_injection]
@@ -26,8 +26,8 @@ class PRETRAIN_MIMIC:
         output_path = Path(save_path) / f"{self.data_name}.jsonl"
         with output_path.open("w", encoding="utf-8") as output:
             for instance in tqdm(json_data, desc = f"Mapping {self.data_name}"):
-                study_id = Path(instance["ecg"]).stem
-                matches = self.available_ecgs.get(study_id)
+                unique_id = Path(instance["ecg"]).stem
+                matches = self.available_ecgs.get(unique_id)
                 if not matches:
                     missing += 1
                     continue

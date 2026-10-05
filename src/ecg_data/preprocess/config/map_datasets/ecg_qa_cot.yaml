@@ -1,0 +1,6 @@
+defaults:
+  - ./common.yaml
+
+data_name: ecg_qa_cot
+save_path: /p01/whan/data/ecg_qa_cot
+data_root_path: /p01/whan/ecg_qa_cot
