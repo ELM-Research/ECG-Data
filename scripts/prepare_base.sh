@@ -9,8 +9,8 @@
 
 
 # PTB XL
-# uv run python src/ecg_data/preprocess/preprocess_base.py \
-# --config src/ecg_data/preprocess/config/base_datasets/ptb_xl.yaml
+uv run python src/ecg_data/preprocess/preprocess_base.py \
+--config src/ecg_data/preprocess/config/base_datasets/ptb_xl.yaml
 
 
 # MIMIC IV ECG
@@ -18,8 +18,8 @@
 # --config src/ecg_data/preprocess/config/base_datasets/mimic_iv_ecg.yaml
 
 # EchoNext
-uv run python src/ecg_data/preprocess/preprocess_base.py \
---config src/ecg_data/preprocess/config/base_datasets/echonext.yaml
+# uv run python src/ecg_data/preprocess/preprocess_base.py \
+# --config src/ecg_data/preprocess/config/base_datasets/echonext.yaml
 
 
 # Code15
