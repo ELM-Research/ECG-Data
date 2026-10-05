@@ -3,13 +3,11 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 from multiprocessing import Pool
-from ecg_data.preprocess.ecg_datasets.common import ecg_placeholder_injection
 
 class ECHONEXT:
     def __init__(self, data_name: str, data_root_path: str,):
         self.data_name = data_name
         self.data_root_path = data_root_path
-        self.preprocessors = [ecg_placeholder_injection]
 
     def prepare_json(self, save_path: str):
         output_path = Path(save_path) / f"{self.data_name}.jsonl"
