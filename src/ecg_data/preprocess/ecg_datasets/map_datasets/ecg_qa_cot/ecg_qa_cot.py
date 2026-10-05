@@ -4,8 +4,7 @@ import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 from collections import defaultdict
-from ecg_data.preprocess.ecg_datasets.common import open_json, exact_string_removal, \
-    ecg_placeholder_injection
+from ecg_data.preprocess.ecg_datasets.common import exact_string_removal, ecg_placeholder_injection
 
 SPLIT = "train"
 class ECG_QA_COT:
