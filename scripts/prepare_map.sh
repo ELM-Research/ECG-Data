@@ -5,8 +5,14 @@
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/pretrain_mimic.yaml
 
+# uv run python src/ecg_data/preprocess/preprocess_map.py \
+# --config src/ecg_data/preprocess/config/map_datasets/heedb.yaml
+
+# uv run python src/ecg_data/preprocess/preprocess_map.py \
+# --config src/ecg_data/preprocess/config/map_datasets/agh.yaml
+
 uv run python src/ecg_data/preprocess/preprocess_map.py \
---config src/ecg_data/preprocess/config/map_datasets/heedb.yaml
+--config src/ecg_data/preprocess/config/map_datasets/echonext.yaml
 
 ### ECG QA MIMIC-IV
 # uv run src/main.py \

@@ -15,11 +15,11 @@ class HEEDB:
         output_path = Path(save_path) / f"{self.data_name}.jsonl"
         instances = Path(self.data_root_path).glob("*/*.npy")
         with Pool() as pool, output_path.open("w", encoding="utf-8") as output:
-            lines = pool.imap(self._map_instance, instances, chunksize=64)
+            lines = pool.imap(self.map_instance, instances, chunksize=64)
             for line in tqdm(lines, desc=f"Mapping {self.data_name}"):
                 output.write(line + "\n")
 
-    def _map_instance(self, instance: Path):
+    def map_instance(self, instance: Path):
         np_file = np.load(instance, allow_pickle=True).item()
         line = {"ecg_path": str(instance),
                 "text": self.preprocess_report(np_file["reports_physician"])}

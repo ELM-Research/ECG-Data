@@ -1,0 +1,6 @@
+defaults:
+  - ./common.yaml
+
+data_name: echonext
+save_path: /p01/whan/data/echonext
+data_root_path: /p01/whan/data/echonext/preprocessed_250_10
