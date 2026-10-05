@@ -4,7 +4,7 @@ import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 from collections import defaultdict
-from ecg_data.preprocess.ecg_datasets.common import exact_string_removal, ecg_placeholder_injection
+from ecg_data.preprocess.ecg_datasets.common import preprocess_conversation
 
 SPLIT = "test"
 class ECG_QA_COT:
@@ -17,9 +17,6 @@ class ECG_QA_COT:
             for path in Path(base_data).glob("*/*.npy"):
                 unique_id = "_".join(path.stem.split("_")[-4:-1])
                 self.available_ecgs[unique_id].append(str(path))
-
-        self.preprocessors = [exact_string_removal,
-                              ecg_placeholder_injection]
 
     def prepare_json(self, save_path: str):
         df = pd.read_csv(f"../ecg_qa_cot/ecg_qa_cot_{SPLIT}.csv")
@@ -41,11 +38,6 @@ class ECG_QA_COT:
                     written += 1
         print(f"Write {written} rows; skipped {missing}")
 
-    def preprocess_value(self, text: str, role: str):
-        for preprocessor in self.preprocessors:
-            text = preprocessor(text, role)
-        return text
-
     def preprocess_conversation(self, instance):
         cot = instance["rationale"].split(". Answer:")[0]
         clinical_context = instance["clinical_context"]
@@ -56,10 +48,7 @@ class ECG_QA_COT:
                  "value": f"Clinical Context: {clinical_context}\nQuestion: {question}"},
                 {"from": "gpt",
                  "value": f"<think>\n{cot}\n</think>\n\n<answer>{answer}</answer>"},]
-        return [
-            {**turn, "value": self.preprocess_value(turn["value"], turn["from"])}
-            for turn in turns
-        ]
+        return preprocess_conversation(turns)
 
     def parse_ecg_id(self, ecg_id: str) -> int:
         parsed_ecg_id = int(ecg_id.strip("[]"))

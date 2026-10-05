@@ -2,8 +2,7 @@ import json
 from tqdm import tqdm
 from pathlib import Path
 from collections import defaultdict
-from ecg_data.preprocess.ecg_datasets.common import open_json, exact_string_removal, \
-    ecg_placeholder_injection
+from ecg_data.preprocess.ecg_datasets.common import open_json, preprocess_conversation
 
 class PRETRAIN_MIMIC:
     def __init__(self, data_name: str, data_root_path: str,):
@@ -16,9 +15,6 @@ class PRETRAIN_MIMIC:
                 # MIMIC-IV-ECG study IDs are unique; BaseDataset appends _<segment>.npy.
                 unique_id = path.stem.rsplit("_", 2)[-2]
                 self.available_ecgs[unique_id].append(str(path))
-
-        self.preprocessors = [exact_string_removal,
-                              ecg_placeholder_injection]
 
     def prepare_json(self, save_path: str):
         json_data = open_json(f"{self.data_root_path}/{self.data_name}.json")
@@ -39,13 +35,5 @@ class PRETRAIN_MIMIC:
                     written += 1
         print(f"Write {written} rows; skipped {missing}")
 
-    def preprocess_value(self, text: str, role: str):
-        for preprocessor in self.preprocessors:
-            text = preprocessor(text, role)
-        return text
-
     def preprocess_conversation(self, turns: list[dict]):
-        return [
-            {**turn, "value": self.preprocess_value(turn["value"], turn["from"])}
-            for turn in turns
-        ]
+        return preprocess_conversation(turns)

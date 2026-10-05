@@ -3,8 +3,7 @@ import glob
 from tqdm import tqdm
 from pathlib import Path
 from collections import defaultdict
-from ecg_data.preprocess.ecg_datasets.common import open_json, exact_string_removal, \
-    ecg_placeholder_injection
+from ecg_data.preprocess.ecg_datasets.common import open_json, preprocess_conversation
 
 class ECG_QA:
     def __init__(self, data_name: str, data_root_path: str,):
@@ -17,9 +16,6 @@ class ECG_QA:
                 # MIMIC-IV-ECG study IDs are unique; BaseDataset appends _<segment>.npy.
                 unique_id = path.stem.rsplit("_", 2)[-2]
                 self.available_ecgs[unique_id].append(str(path))
-
-        self.preprocessors = [exact_string_removal,
-                              ecg_placeholder_injection]
 
     def prepare_json(self, save_path: str):
         paraphrased_jsons = glob.glob(f"{self.data_root_path}/paraphrased/*/*.json")
@@ -43,19 +39,11 @@ class ECG_QA:
                     written += 1
         print(f"Write {written} rows; skipped {missing}")
 
-    def preprocess_value(self, text: str, role: str):
-        for preprocessor in self.preprocessors:
-            text = preprocessor(text, role)
-        return text
-
     def preprocess_conversation(self, instance):
         answer = " ".join(instance["answer"])
         turns = [{"from": "human", "value": instance["question"]},
                 {"from": "gpt", "value": answer},]
-        return [
-            {**turn, "value": self.preprocess_value(turn["value"], turn["from"])}
-            for turn in turns
-        ]
+        return preprocess_conversation(turns)
     
     def setup_ecg_qa(self, glob_paths):
         question_types=["single-verify", "single-choose", "single-query"]

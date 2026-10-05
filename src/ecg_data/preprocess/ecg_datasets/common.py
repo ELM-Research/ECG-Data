@@ -87,10 +87,19 @@ def exact_string_removal(text: str, role: str):
     pattern = re.compile("|".join(map(re.escape, REMOVE)), re.IGNORECASE)
     return pattern.sub("", text)
 
-def ecg_placeholder_injection(text: str, role: str):
-    if role in ["gpt", "assistant"]:
-        return f"<ecg>\n{text}"
-    return text
+def ecg_placeholder_injection(text: str):
+    return f"<ecg>\n{text}"
+
+def preprocess_conversation(turns: list[dict]):
+    turns = [
+        {**turn, "value": exact_string_removal(turn["value"], turn["from"])}
+        for turn in turns
+    ]
+    for turn in turns:
+        if turn["from"] in ["gpt", "assistant"]:
+            turn["value"] = ecg_placeholder_injection(turn["value"])
+            break
+    return turns
 
 def append_jsonl(jsonl_path, instance):
     with open(jsonl_path, "a", encoding = "utf-8") as f:

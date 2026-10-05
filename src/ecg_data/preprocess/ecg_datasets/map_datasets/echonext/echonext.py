@@ -3,6 +3,7 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 from multiprocessing import Pool
+from ecg_data.preprocess.ecg_datasets.common import ecg_placeholder_injection
 
 class ECHONEXT:
     def __init__(self, data_name: str, data_root_path: str,):
@@ -26,4 +27,4 @@ class ECHONEXT:
 
     def preprocess_report(self, report: list):
         joined_report = "; ".join(report)
-        return f"<ecg>\n{joined_report}"
+        return ecg_placeholder_injection(joined_report)
