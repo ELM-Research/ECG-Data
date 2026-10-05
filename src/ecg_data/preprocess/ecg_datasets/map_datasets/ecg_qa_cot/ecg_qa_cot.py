@@ -6,7 +6,7 @@ from pathlib import Path
 from collections import defaultdict
 from ecg_data.preprocess.ecg_datasets.common import exact_string_removal, ecg_placeholder_injection
 
-SPLIT = "train"
+SPLIT = "test"
 class ECG_QA_COT:
     def __init__(self, data_name: str, data_root_path: str,):
         self.data_name = data_name

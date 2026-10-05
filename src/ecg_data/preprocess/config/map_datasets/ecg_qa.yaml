@@ -1,0 +1,6 @@
+defaults:
+  - ./common.yaml
+
+data_name: ecg_qa
+save_path: /p01/whan/data/ecg_qa
+data_root_path: /p01/whan/ecg_preprocess/src/ecg_datasets/map/ecg_qa/output/mimic_iv
