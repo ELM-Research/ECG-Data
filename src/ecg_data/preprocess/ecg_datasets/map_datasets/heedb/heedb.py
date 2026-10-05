@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 from multiprocessing import Pool
-from ecg_data.preprocess.ecg_datasets.common import ecg_placeholder_injection
+from ecg_data.preprocess.ecg_datasets.common import clean_text, ecg_placeholder_injection
 
 class HEEDB:
     def __init__(self, data_name: str, data_root_path: str,):
@@ -26,4 +26,4 @@ class HEEDB:
 
     def preprocess_report(self, report: list):
         joined_report = "; ".join(report)
-        return ecg_placeholder_injection(joined_report)
+        return ecg_placeholder_injection(clean_text(joined_report))

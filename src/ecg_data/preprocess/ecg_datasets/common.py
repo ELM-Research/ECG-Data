@@ -82,21 +82,20 @@ def open_json(path) -> dict:
     with open(path) as f:
         return json.load(f)
 
-REMOVE = ["<ecg>", "\n<ecg>", "<image>"]
-def exact_string_removal(text: str, role: str):
-    pattern = re.compile("|".join(map(re.escape, REMOVE)), re.IGNORECASE)
-    return pattern.sub("", text)
+def exact_string_removal(text: str):
+    return TAG_RE.sub("", text)
 
 def ecg_placeholder_injection(text: str):
     return f"<ecg>\n{text}"
 
 def preprocess_conversation(turns: list[dict]):
     turns = [
-        {**turn, "value": exact_string_removal(turn["value"], turn["from"])}
+        {**turn, "from": ROLES[turn["from"].strip().lower()],
+         "value": clean_text(turn["value"])}
         for turn in turns
     ]
     for turn in turns:
-        if turn["from"] in ["gpt", "assistant"]:
+        if turn["from"] == "assistant":
             turn["value"] = ecg_placeholder_injection(turn["value"])
             break
     return turns
@@ -120,9 +119,8 @@ IMAGE_WORD_RE = re.compile(r"\b(image|picture)\b", re.IGNORECASE)
 
 
 def clean_text(text: str) -> str:
-    text = TAG_RE.sub("", text)
-    text = IMAGE_WORD_RE.sub(lambda match: "Signal" if match[1][0].isupper() else "signal", text)
-    return LEADING_PREFIX_RE.sub("", text)
+    text = exact_string_removal(text)
+    return IMAGE_WORD_RE.sub(lambda match: "Signal" if match[1][0].isupper() else "signal", text)
 
 def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str, str]]:
     normalized = []
@@ -131,5 +129,6 @@ def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str
     for message in text:
         role = next((message[key] for key in ("role", "from") if key in message), None)
         content = next((message[key] for key in ("content", "value") if key in message), None)
-        normalized.append({"role": ROLES[role.strip().lower()], "content": clean_text(content)})
+        normalized.append({"role": ROLES[role.strip().lower()],
+                           "content": LEADING_PREFIX_RE.sub("", clean_text(content))})
     return normalized
