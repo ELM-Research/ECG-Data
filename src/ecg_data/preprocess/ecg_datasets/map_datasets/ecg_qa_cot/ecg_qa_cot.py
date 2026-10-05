@@ -16,11 +16,9 @@ class ECG_QA_COT:
         self.base_data_paths = ["/p01/whan/data/ptb_xl/preprocessed_250_10"]
         for base_data in self.base_data_paths:
             for path in Path(base_data).glob("*/*.npy"):
-                # MIMIC-IV-ECG study IDs are unique; BaseDataset appends _<segment>.npy.
-                print(path)
-                # print(study_id)
-                input()
-                self.available_ecgs[0].append(str(path))
+                # Filename ends with _<ecg_id>_hr_<segment>.npy.
+                unique_id = int(path.stem.rsplit("_", 3)[-3])
+                self.available_ecgs[unique_id].append(str(path))
 
         self.preprocessors = [exact_string_removal,
                               ecg_placeholder_injection]
@@ -32,9 +30,7 @@ class ECG_QA_COT:
         output_path = Path(save_path) / f"{self.data_name}.jsonl"
         with output_path.open("w", encoding="utf-8") as output:
             for instance in tqdm(df, desc = f"Mapping {self.data_name}"):
-                unique_id = self.get_ptbxl_ecg_path(self.parse_ecg_id(instance["ecg_id"]))
-                print(unique_id)
-                input()
+                unique_id = self.parse_ecg_id(instance["ecg_id"])
                 matches = self.available_ecgs.get(unique_id)
                 if not matches:
                     missing += 1
