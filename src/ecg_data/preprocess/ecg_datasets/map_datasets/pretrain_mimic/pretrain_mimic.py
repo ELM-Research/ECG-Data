@@ -1,7 +1,7 @@
 import json
-from collections import defaultdict
 from tqdm import tqdm
 from pathlib import Path
+from collections import defaultdict
 from ecg_data.preprocess.ecg_datasets.common import open_json, exact_string_removal, \
     ecg_placeholder_injection
 
@@ -22,18 +22,22 @@ class PRETRAIN_MIMIC:
 
     def prepare_json(self, save_path: str):
         json_data = open_json(f"{self.data_root_path}/{self.data_name}.json")
+        written = missing = 0
         output_path = Path(save_path) / f"{self.data_name}.jsonl"
         with output_path.open("w", encoding="utf-8") as output:
             for instance in tqdm(json_data, desc = f"Mapping {self.data_name}"):
                 study_id = Path(instance["ecg"]).stem
                 matches = self.ecgs_by_study.get(study_id)
                 if not matches:
+                    missing += 1
                     continue
                 preprocessed_conversation = self.preprocess_conversation(instance["conversations"])
                 for match in matches:
                     line = {"ecg_path": match,
                             "text": preprocessed_conversation}
                     output.write(json.dumps(line, ensure_ascii=False) + "\n")
+                    written += 1
+        print(f"Write {written} rows; skipped {missing}")
 
     def preprocess_value(self, text: str, role: str):
         for preprocessor in self.preprocessors:
