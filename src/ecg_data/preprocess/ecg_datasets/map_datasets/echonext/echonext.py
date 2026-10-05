@@ -22,7 +22,6 @@ class ECHONEXT:
         np_file = np.load(instance, allow_pickle=True).item()
         line = {"ecg_path": str(instance),
                 "text": self.preprocess_report(np_file["reports_physician"])}
-        print(line)
         return json.dumps(line, ensure_ascii=False)
 
     def preprocess_report(self, report: list):
