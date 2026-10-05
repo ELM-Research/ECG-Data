@@ -27,8 +27,13 @@
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/ecg_instruct_pulse.yaml
 
+# # ECG Grounding
+# uv run python src/ecg_data/preprocess/preprocess_map.py \
+# --config src/ecg_data/preprocess/config/map_datasets/ecg_grounding.yaml
+
+# # ECG Protocol GG CoT
 uv run python src/ecg_data/preprocess/preprocess_map.py \
---config src/ecg_data/preprocess/config/map_datasets/ecg_grounding.yaml
+--config src/ecg_data/preprocess/config/map_datasets/ecg_protocol_gg_cot.yaml
 
 # ### ECG Grounding
 # uv run src/main.py \

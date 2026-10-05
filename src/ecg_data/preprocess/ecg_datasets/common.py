@@ -82,6 +82,17 @@ def open_json(path) -> dict:
     with open(path) as f:
         return json.load(f)
 
+def iter_jsonl(path):
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                yield json.loads(line)
+
+def append_jsonl(jsonl_path, instance):
+    with open(jsonl_path, "a", encoding = "utf-8") as f:
+        f.write(json.dumps(instance, ensure_ascii=False) + "\n")
+
 ROLES = {
     "human": "user", "user": "user", "q": "user",
     "assistant": "assistant", "gpt": "assistant", "model": "assistant", "a": "assistant",
@@ -112,7 +123,3 @@ def preprocess_conversation(turns: list[dict]):
             turn["value"] = ecg_placeholder_injection(turn["value"])
             break
     return turns
-
-def append_jsonl(jsonl_path, instance):
-    with open(jsonl_path, "a", encoding = "utf-8") as f:
-        f.write(json.dumps(instance, ensure_ascii=False) + "\n")
