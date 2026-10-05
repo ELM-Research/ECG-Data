@@ -1,7 +1,4 @@
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
-# --config src/ecg_data/preprocess/config/map_datasets/pretrain_mimic.yaml
-
-# uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/heedb.yaml
 
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
@@ -9,6 +6,10 @@
 
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/echonext.yaml
+
+# # Pretrain MIMIC
+# uv run python src/ecg_data/preprocess/preprocess_map.py \
+# --config src/ecg_data/preprocess/config/map_datasets/pretrain_mimic.yaml
 
 # # ECG QA COT
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
@@ -18,11 +19,16 @@
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/ecg_qa.yaml
 
+# # ECG Instruct 45k
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/ecg_instruct_45k.yaml
 
+# # ECG Instruct Pulse
+# uv run python src/ecg_data/preprocess/preprocess_map.py \
+# --config src/ecg_data/preprocess/config/map_datasets/ecg_instruct_pulse.yaml
+
 uv run python src/ecg_data/preprocess/preprocess_map.py \
---config src/ecg_data/preprocess/config/map_datasets/ecg_instruct_pulse.yaml
+--config src/ecg_data/preprocess/config/map_datasets/ecg_grounding.yaml
 
 # ### ECG Grounding
 # uv run src/main.py \

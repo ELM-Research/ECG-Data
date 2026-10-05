@@ -37,8 +37,6 @@ class ECG_INSTRUCT_PULSE:
                 for match in matches:
                     line = {"ecg_path": match,
                             "text": preprocessed_conversation}
-                    print(line)
-                    input()
                     output.write(json.dumps(line, ensure_ascii=False) + "\n")
                     written += 1
         print(f"Write {written} rows; skipped {missing}")

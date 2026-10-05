@@ -1,0 +1,6 @@
+defaults:
+  - ./common.yaml
+
+data_name: ecg_grounding
+save_path: /p01/whan/data/ecg_grounding
+data_root_path: /p01/whan/ecg_preprocess/src/ecg_datasets/map/ecg_grounding
