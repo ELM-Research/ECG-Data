@@ -177,4 +177,22 @@ Please execute `bash scripts/train_ecg_byte.sh`.
 
 ### Hugging Face upload
 
-We have also released the code for uploading the preprocessed, mapped datasets onto HuggingFace datasets. Please view `scripts/upload_hf.sh` for the script!
+Log in with `uv run hf auth login` using a token with write access to `ELM-Research`,
+or set `HF_TOKEN`. Run from the repository root:
+
+```bash
+bash scripts/upload_hf.sh \
+  --jsonl /path/to/first.jsonl /path/to/second.jsonl \
+  --name ecg-combined \
+  --visibility private
+```
+
+One or more JSONL files with matching schemas are combined into one `train` split
+at `ELM-Research/<name>` and uploaded as Parquet. `ecg_path` remains a path;
+referenced ECG files are not uploaded. Use separate datasets when `text` is a
+string in one file and a conversation list in another.
+
+Visibility defaults to `private`; use `--visibility public` to make the repository
+public. This setting also applies to an existing repository. Rerunning replaces
+its `train` split. After uploading, the script streams the uploaded dataset and
+prints its first row, using your saved login or `HF_TOKEN` for private access.
