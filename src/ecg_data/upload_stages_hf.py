@@ -1,13 +1,19 @@
-"""Split mapped JSONLs into the six training stages and upload private datasets."""
+"""Upload six training stages and two test benchmarks as private datasets."""
 
 import argparse
 from pathlib import Path
 
 DATA_ROOT = Path("/p01/whan/data")
-STAGES = (
-    "siglep-pretraining", "orah-pretraining-1", "orah-pretraining-2",
-    "orah-sft-1", "orah-sft-2", "orah-rl",
-)
+SPLITS = {
+    "siglep-pretraining": "train",
+    "orah-pretraining-1": "train",
+    "orah-pretraining-2": "train",
+    "orah-sft-1": "train",
+    "orah-sft-2": "train",
+    "orah-rl": "train",
+    "ECG-QA-CoT-Benchmark": "test",
+    "ECG-R1-Benchmark": "test",
+}
 
 # Counts from the training table are weights, not fixed sample limits.
 # Each source is shuffled once, then partitioned across its listed stages.
@@ -48,6 +54,12 @@ SOURCES = {
     "ecg_r1_rl": (DATA_ROOT / "ecg_protocol_gg_cot/ecg_protocol_gg_cot_train_rl.jsonl", {
         "orah-rl": 3_948,
     }),
+    "ecg_qa_cot_test": (DATA_ROOT / "ecg_qa_cot/ecg_qa_cot_test.jsonl", {
+        "ECG-QA-CoT-Benchmark": 1,
+    }),
+    "ecg_protocol_gg_cot_test": (DATA_ROOT / "ecg_protocol_gg_cot/ecg_protocol_gg_cot_test.jsonl", {
+        "ECG-R1-Benchmark": 1,
+    }),
 }
 
 
@@ -65,10 +77,10 @@ def split_ranges(size, weights):
     return ranges
 
 
-def build_stages(sources, seed):
+def build_datasets(sources, seed):
     from datasets import concatenate_datasets, load_dataset
 
-    parts = {stage: [] for stage in STAGES}
+    parts = {name: [] for name in SPLITS}
     for name, (path, weights) in sources.items():
         data = load_dataset("json", data_files=str(path), split="train").shuffle(seed=seed)
         for stage, indices in split_ranges(len(data), weights).items():
@@ -101,24 +113,24 @@ def main():
     if missing:
         parser.error(f"Missing JSONLs for {', '.join(missing)}. Set each with --source NAME=JSONL.")
 
-    stages = build_stages(sources, args.seed)
-    for stage, data in stages.items():
-        print(f"ELM-Research/{stage}: {len(data):,} rows", flush=True)
+    datasets = build_datasets(sources, args.seed)
+    for name, data in datasets.items():
+        print(f"ELM-Research/{name} ({SPLITS[name]}): {len(data):,} rows", flush=True)
     if args.mode == "preview":
         return
 
     from huggingface_hub import HfApi
 
     api = HfApi()
-    for stage in stages:
-        repo_id = f"ELM-Research/{stage}"
+    for name in datasets:
+        repo_id = f"ELM-Research/{name}"
         api.create_repo(repo_id, repo_type="dataset", visibility="private", exist_ok=True)
         if not api.repo_info(repo_id, repo_type="dataset").private:
             raise ValueError(f"{repo_id} already exists and is not private.")
 
-    for stage, data in stages.items():
-        repo_id = f"ELM-Research/{stage}"
-        data.push_to_hub(repo_id, split="train", private=True)
+    for name, data in datasets.items():
+        repo_id = f"ELM-Research/{name}"
+        data.push_to_hub(repo_id, split=SPLITS[name], private=True)
         print(f"Uploaded https://huggingface.co/datasets/{repo_id}", flush=True)
 
 
