@@ -25,16 +25,8 @@ def _count_batch(paths, *, data_name, experiment):
 
 def run_analysis(cfg):
     experiment = cfg["experiment"]
-    if experiment not in EXPERIMENTS:
-        raise ValueError(f"Unknown experiment: {experiment}")
     batch_size = cfg["files_per_batch"]
-    if type(batch_size) is not int or batch_size < 1:
-        raise ValueError("files_per_batch must be a positive integer.")
-    if type(cfg["development"]) is not bool:
-        raise ValueError("development must be true or false.")
     cores = cfg["num_cores"]
-    if cores is not None and (type(cores) is not int or cores < 1):
-        raise ValueError("num_cores must be a positive integer or null.")
 
     paths = iter(report_files(cfg["data_path"], cfg["data_name"]))
     first = next(paths, None)

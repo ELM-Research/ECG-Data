@@ -19,12 +19,10 @@ def _categories(terms):
         for category, values in terms.items()
         for term in values
     }
-    if len(categories) != sum(len(values) for values in terms.values()):
-        raise ValueError("Terms must be unique after lowercasing.")
     return categories
 
 
-def _empty_counts():
+def empty_counts():
     return {
         "unchanged_reports": 0,
         "modified_reports": 0,
@@ -40,7 +38,7 @@ def count_reports(reports, terms=TERMS):
         original = normalize_report(software, **NORMALIZATION)
         final = normalize_report(physician, **NORMALIZATION)
         if source not in results:
-            results[source] = _empty_counts()
+            results[source] = empty_counts()
         counts = results[source]
         if original == final:
             counts["unchanged_reports"] += 1
@@ -59,7 +57,7 @@ def count_reports(reports, terms=TERMS):
 def merge_counts(total, partial):
     for source, incoming in partial.items():
         if source not in total:
-            total[source] = _empty_counts()
+            total[source] = empty_counts()
         counts = total[source]
         counts["unchanged_reports"] += incoming["unchanged_reports"]
         counts["modified_reports"] += incoming["modified_reports"]
