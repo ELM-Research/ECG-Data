@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 
 
-def normalize_report(report, *, case, duplicates, order):
-    """Normalize whole statements without changing whitespace or punctuation."""
+def normalize_report(report, *, case, duplicates, order, blanks="preserve"):
+    """Normalize statements without rewriting nonblank whitespace or punctuation."""
     if not isinstance(report, list) or any(not isinstance(s, str) for s in report):
         raise TypeError("Each report must be a list of strings.")
     if case not in ("lower", "preserve"):
@@ -14,8 +14,12 @@ def normalize_report(report, *, case, duplicates, order):
         raise ValueError("duplicates must be 'collapse' or 'preserve'.")
     if order not in ("ignore", "preserve"):
         raise ValueError("order must be 'ignore' or 'preserve'.")
+    if blanks not in ("preserve", "drop"):
+        raise ValueError("blanks must be 'preserve' or 'drop'.")
 
     statements = [s.lower() for s in report] if case == "lower" else list(report)
+    if blanks == "drop":
+        statements = [s for s in statements if s.strip()]
     if duplicates == "collapse":
         statements = list(dict.fromkeys(statements))
     if order == "ignore":

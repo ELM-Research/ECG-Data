@@ -1,10 +1,10 @@
-"""Whole-report and statement changes across all eligible report pairs."""
+"""Whole-report and statement changes across all included report pairs."""
 
 from collections import Counter
 
 from ecg_data.analysis.software_v_human.reports import normalize_report
 
-NORMALIZATION = {"case": "lower", "duplicates": "collapse", "order": "ignore"}
+NORMALIZATION = {"case": "lower", "duplicates": "collapse", "order": "ignore", "blanks": "drop"}
 INPUTS = ("nonempty", "software_empty", "physician_empty", "both_empty", "missing", "invalid")
 CHANGES = ("unchanged", "added_only", "deleted_only", "both")
 STATEMENTS = ("retained", "added", "deleted")

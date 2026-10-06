@@ -6,5 +6,4 @@ study_options:
   empty_reports: exclude # Log empty pairs separately; they may indicate preprocessing errors.
 
 plots:
-  top_terms: 20 # Display the most frequently edited statements; analysis saves every statement.
-  terms_per_page: 10 # Use the same statements and order for all three statement plots.
+  top_terms: 20 # One plot per metric, with the same statements; analysis saves every statement.

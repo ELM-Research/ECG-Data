@@ -8,7 +8,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.ticker import PercentFormatter
+from matplotlib.patches import Patch
+from matplotlib.ticker import MultipleLocator, PercentFormatter
 
 from ecg_data.preprocess.config.load import get_config
 
@@ -29,108 +30,156 @@ INPUT_NAMES = {
 TERM_METRICS = {
     "disagreement": (
         "edited_report_count", "mentioned_report_count", "Statement disagreement",
-        "Pairs where this statement was added or deleted / pairs mentioning it in either report.",
+        "Included pairs where the physician added or deleted this statement.",
+        "Included pairs containing this statement in either the software or physician report.",
     ),
     "additions": (
         "added", "software_absent_report_count", "Physician additions",
-        "Pairs where the physician added this statement / eligible pairs where software omitted it.",
+        "Included pairs where the physician added this statement.",
+        "Included pairs where the software report does not contain this statement.",
     ),
     "deletions": (
         "deleted", "software_report_count", "Physician deletions",
-        "Pairs where the physician deleted this statement / eligible pairs where software included it.",
+        "Included pairs where the physician deleted this statement.",
+        "Included pairs where the software report contains this statement.",
     ),
 }
-COLORS = ("#28649b", "#c46b25", "#43816c")
+COLORS = ("#386b96", "#c17735", "#43816c")
 
 
-def _fraction_label(numerator, denominator):
+def _percentage(numerator, denominator):
     if not denominator:
-        return f"Undefined ({numerator:,} / 0)"
+        return "Undefined"
     value = numerator / denominator
-    percentage = "<0.1%" if 0 < value < 0.001 else f"{value:.1%}"
-    return f"{percentage}  ({numerator:,} / {denominator:,})"
+    return "<0.1%" if 0 < value < 0.001 else f"{value:.1%}"
 
 
-def _plot_rates(results, rows, values, *, title, meaning, output, note=""):
-    """Group sources on identical rows; label each bar with its exact fraction."""
+def _plot_rates(results, rows, values, *, title, numerator, denominator, cohort, output, note):
+    """Keep definitions, chart rows, and notes in separate layout regions."""
     sources = list(results)
-    labels = [fill(label, width=42) for _, label in rows]
-    steps = [max(len(sources) + 0.8, (label.count("\n") + 1) * 0.7) for label in labels]
-    height = max(4.2, 2.5 + sum(steps) * 0.36)
-    fig, ax = plt.subplots(figsize=(15, height))
-    positions = []
-    position = 0
-    for step in steps:
-        positions.append(position)
-        position += step
-    for source_index, source in enumerate(sources):
-        metrics = results[source]
-        for index, (key, _) in enumerate(rows):
-            numerator, denominator = values(metrics, key)
-            value = numerator / denominator if denominator else 0
-            y = positions[index] + source_index
-            ax.barh(
-                y, value, height=0.72, color=COLORS[source_index % len(COLORS)],
-                label=SOURCE_NAMES.get(source, source) if index == 0 else None,
-            )
-            ax.text(1.025, y, _fraction_label(numerator, denominator),
-                    transform=ax.get_yaxis_transform(), va="center", fontsize=10, clip_on=False)
+    labels = [fill(label, width=43) for _, label in rows]
+    row_heights = [max(len(sources) * 0.37 + 0.28, (label.count("\n") + 1) * 0.2 + 0.28) for label in labels]
+    body_height = max(1.25, sum(row_heights))
+    blocks = [
+        (title, 18, "bold"),
+        (fill(f"Numerator: {numerator}", 125), 10.5, "normal"),
+        (fill(f"Denominator: {denominator}", 125), 10.5, "normal"),
+        (fill(cohort, 125), 10.5, "normal"),
+    ]
+    block_heights = [(text.count("\n") + 1) * size / 72 * 1.5 + 0.1 for text, size, _ in blocks]
+    header_height = sum(block_heights) + 0.4
+    footer = fill(note, 145)
+    footer_height = 0.4 + (footer.count("\n") + 1) * 0.18
+    height = header_height + 0.35 + body_height + footer_height + 0.4
+    fig = plt.figure(figsize=(15, height), facecolor="white")
+    grid = fig.add_gridspec(
+        4, 3, height_ratios=(header_height, 0.35, body_height, footer_height),
+        width_ratios=(4.4, 5.3, 3.6), hspace=0, wspace=0.08,
+        left=0.035, right=0.98, top=1 - 0.2 / height, bottom=0.2 / height,
+    )
 
-    ax.set_yticks([position + (len(sources) - 1) / 2 for position in positions], labels)
-    ax.invert_yaxis()
-    ax.set_xlim(0, 1)
-    ax.xaxis.set_major_formatter(PercentFormatter(1))
-    ax.set_xlabel("Percentage of the stated denominator")
-    ax.spines[["top", "right", "left"]].set_visible(False)
-    ax.tick_params(axis="y", length=0, pad=12)
-    ax.grid(axis="x", alpha=0.2)
-    ax.set_axisbelow(True)
-    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.025), frameon=False, ncol=len(sources))
-    fig.suptitle(title, x=0.035, y=0.98, ha="left", fontsize=17, fontweight="bold")
-    fig.text(0.035, 0.925, fill(meaning, 135), ha="left", va="top", fontsize=11)
-    fig.text(0.035, 0.025, fill(note or "Labels show percentage (numerator / denominator).", 150),
-             fontsize=10, va="bottom")
-    fig.subplots_adjust(left=0.31, right=0.76, top=1 - 1.5 / height, bottom=0.85 / height)
+    header = fig.add_subplot(grid[0, :])
+    header.set_axis_off()
+    y = 1
+    for (text, size, weight), block_height in zip(blocks, block_heights):
+        header.text(0, y, text, va="top", fontsize=size, fontweight=weight, color="#253449")
+        y -= block_height / header_height
+    header.legend(
+        handles=[Patch(color=COLORS[index % len(COLORS)], label=SOURCE_NAMES.get(source, source))
+                 for index, source in enumerate(sources)],
+        loc="lower left", ncol=len(sources), frameon=False, borderaxespad=0, fontsize=10,
+    )
+    for column, text in enumerate(("REPORT CATEGORY / STATEMENT", "RATE", "PERCENT")):
+        heading = fig.add_subplot(grid[1, column])
+        heading.set_axis_off()
+        heading.text(0, 0.25, text, fontsize=8.5, fontweight="bold", color="#64748b")
+        if column == 2:
+            heading.text(1, 0.25, "NUMERATOR / DENOMINATOR", ha="right",
+                         fontsize=8.5, fontweight="bold", color="#64748b")
+
+    label_ax, rate_ax, count_ax = [fig.add_subplot(grid[2, column]) for column in range(3)]
+    for ax in (label_ax, rate_ax, count_ax):
+        ax.set(xlim=(0, 1), ylim=(body_height, 0), yticks=[])
+    label_ax.set_axis_off()
+    count_ax.set_axis_off()
+    rate_ax.spines[["top", "right", "left"]].set_visible(False)
+    rate_ax.spines["bottom"].set_color("#cbd5e1")
+    rate_ax.xaxis.set_major_locator(MultipleLocator(0.25))
+    rate_ax.xaxis.set_major_formatter(PercentFormatter(1, decimals=0))
+    rate_ax.tick_params(axis="x", labelsize=9, colors="#64748b", length=0, pad=8)
+    rate_ax.grid(axis="x", color="#e2e8f0", linewidth=0.7)
+    rate_ax.set_axisbelow(True)
+    position = 0
+    for index, ((key, _), label, row_height) in enumerate(zip(rows, labels, row_heights)):
+        center = position + row_height / 2
+        if index % 2 == 0:
+            for ax in (label_ax, rate_ax, count_ax):
+                ax.axhspan(position, position + row_height, color="#f5f7fa", zorder=0)
+        label_ax.text(0, center, label, va="center", fontsize=10.5, color="#253449")
+        for source_index, source in enumerate(sources):
+            n, d = values(results[source], key)
+            y = center + (source_index - (len(sources) - 1) / 2) * 0.37
+            color = COLORS[source_index % len(COLORS)]
+            rate_ax.barh(y, n / d if d else 0, height=0.23, color=color)
+            count_ax.text(0, y, _percentage(n, d), va="center", fontsize=10.5, fontweight="bold", color=color)
+            count_ax.text(1, y, f"{n:,} / {d:,}", ha="right", va="center", fontsize=10, color=color)
+        position += row_height
+
+    footer_ax = fig.add_subplot(grid[3, :])
+    footer_ax.set_axis_off()
+    footer_ax.text(0, 0, footer, va="bottom", fontsize=9, color="#64748b")
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=180, facecolor="white")
     plt.close(fig)
 
 
-def plot_results(results, output, *, top_terms, terms_per_page):
+def plot_results(results, output, *, top_terms):
     """Keep the full saved analysis; limit only the statement plots."""
     if not results or any(metrics.get("study") != "edits" for metrics in results.values()):
         raise ValueError("Expected saved results from experiment: edits.")
+    if any(metrics.get("normalization", {}).get("blanks") != "drop" for metrics in results.values()):
+        raise ValueError("Rerun the edits analysis first: these results predate blank-statement removal.")
     if not isinstance(top_terms, int) or top_terms < 1:
         raise ValueError("plots.top_terms must be a positive integer.")
-    if not isinstance(terms_per_page, int) or terms_per_page < 1:
-        raise ValueError("plots.terms_per_page must be a positive integer.")
+    policies = {metrics["empty_reports"] for metrics in results.values()}
+    if len(policies) != 1:
+        raise ValueError("Compared sources must use the same empty-report policy.")
     order = {source: index for index, source in enumerate(SOURCE_NAMES)}
     results = {source: results[source] for source in sorted(results, key=lambda source: (order.get(source, len(order)), source))}
     output = Path(output)
-    cohort = " | ".join(
-        f"{SOURCE_NAMES.get(source, source)}: {metrics['included_reports']:,} eligible / {metrics['input_reports']:,} input pairs"
+    cohort = "Included pairs: both reports are present and are lists of strings."
+    if policies == {"exclude"}:
+        cohort += " Each report must contain at least one nonblank statement."
+    else:
+        cohort += " Empty reports are included under the configured compare policy."
+    counts = " | ".join(
+        f"{SOURCE_NAMES.get(source, source)}: {metrics['included_reports']:,} included / {metrics['input_reports']:,} input pairs"
         for source, metrics in results.items()
     )
     _plot_rates(
         results, [("edited", "Any physician edit")],
         lambda metrics, _: (metrics["edited_reports"], metrics["included_reports"]),
-        title="Report edit rate", meaning="Pairs with any statement difference / all eligible report pairs.",
-        output=output / "01_edit_rate.png", note=cohort,
+        title="Report edit rate", numerator="Included pairs with any statement added or deleted.",
+        denominator="All included report pairs.", cohort=cohort,
+        output=output / "01_edit_rate.png", note=counts,
     )
     _plot_rates(
         results, list(CHANGE_NAMES.items()),
         lambda metrics, key: (metrics["report_counts"][key], metrics["included_reports"]),
-        title="Types of report changes", meaning="Pairs in each change category / all eligible report pairs.",
+        title="Types of report changes", numerator="Included pairs in the stated change category.",
+        denominator="All included report pairs.", cohort=cohort,
         output=output / "02_change_types.png",
-        note="Each eligible pair belongs to exactly one category. " + cohort,
+        note="Each included pair belongs to exactly one category. " + counts,
     )
     _plot_rates(
         results, list(INPUT_NAMES.items()),
         lambda metrics, key: (metrics["input_status_counts"][key], metrics["input_reports"]),
         title="Input quality: empty, missing, and malformed reports",
-        meaning="Pairs with each input issue / all input pairs, counted before exclusions. Categories are mutually exclusive.",
+        numerator="Input pairs with the stated issue. Each pair belongs to at most one issue category.",
+        denominator="All input report pairs read by this analysis, before exclusions.",
+        cohort="Empty: no nonblank statements. Missing: either report is null or absent. Malformed: a present report is not a list of strings.",
         output=output / "03_input_quality.png",
-        note="Empty counts follow report normalization. These logs cannot recover records removed by upstream preprocessing.",
+        note="Missing takes priority over malformed; empty counts require two valid lists. Records removed by upstream preprocessing are not counted.",
     )
     vocabulary = set().union(*(metrics["terms"] for metrics in results.values()))
     edits = {
@@ -138,19 +187,16 @@ def plot_results(results, output, *, top_terms, terms_per_page):
         for term in vocabulary
     }
     selected = sorted((term for term in vocabulary if edits[term]), key=lambda term: (-edits[term], term))[:top_terms]
-    for offset in range(0, len(selected), terms_per_page):
-        page = offset // terms_per_page + 1
-        rows = [(term, term) for term in selected[offset:offset + terms_per_page]]
-        note = (
-            f"Statements {offset + 1}–{offset + len(rows)} of {len(selected)} shown; ranked by total added + deleted counts across sources. "
-            "All statements remain in the saved analysis. Sources use their own eligible denominators."
-        )
-        for name, (numerator, denominator, title, meaning) in TERM_METRICS.items():
+    if selected:
+        rows = [(term, term) for term in selected]
+        note = (f"Showing {len(selected)} statements with the most additions + deletions across sources, in the same order on all statement plots. "
+                "All statements remain in the saved analysis. Each source uses its own report pairs. " + counts)
+        for name, (numerator, denominator, title, numerator_meaning, denominator_meaning) in TERM_METRICS.items():
             _plot_rates(
                 results, rows,
                 lambda metrics, term: (metrics["terms"][term][numerator], metrics["terms"][term][denominator]),
-                title=title, meaning=meaning,
-                output=output / "statements" / f"page_{page:02d}" / f"{name}.png", note=note,
+                title=title, numerator=numerator_meaning, denominator=denominator_meaning, cohort=cohort,
+                output=output / "statements" / f"{name}.png", note=note,
             )
     print(f"Saved edits-study figures to {output}")
 
