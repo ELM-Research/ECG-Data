@@ -124,4 +124,4 @@ def preprocess_conversation(turns: list[dict]):
         if turn["role"] == "assistant":
             turn["content"] = ecg_placeholder_injection(turn["content"])
             break
-    return turns
+    return [turn for turn in turns if turn["role"] != "system"]
