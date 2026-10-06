@@ -113,7 +113,6 @@ def preprocess_report(report: list[str]):
     return ecg_placeholder_injection(clean_text("; ".join(report)))
 
 def preprocess_conversation(turns: list[dict]):
-    """Normalize ShareGPT or role/content turns to role/content messages."""
     turns = [turn.copy() for turn in turns]
     for turn in turns:
         role_key, content_key = ("role", "content") if "role" in turn else ("from", "value")
