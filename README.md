@@ -162,18 +162,9 @@ uv run src/datasets/map/ecg_qa/mapping_mimic_iv_ecg_samples.py src/datasets/map/
 
 1. Downlod the `ECGInstruct.json`from this [link](https://huggingface.co/datasets/PULSE-ECG/ECGInstruct/tree/main). Rename it to `ecg_instruct_pulse.json` and place it in the corresponding folder src/datasets/map/ecg_instruct_pulse.
 
-#### ECG Bench Pulse dataset curated by [PULSE, Liu et al.](https://github.com/AIMedLab/PULSE)
-
-1. The ECG Bench Pulse dataset is exclusively on HuggingFace with `.parquet` files, therefore, we utilize the `datasets` library directly to download the dataset.
-
 #### ECG Grounding Datasets curated by [GEM, Lan et al.](https://github.com/lanxiang1017/GEM)
 
 1. Download the `ECG_Grounding_30k.json`, `ecg-grounding-test.json` and `grounding_train_30k.json` from this [link](https://huggingface.co/datasets/LANSG/ECG-Grounding/tree/main/ecg_jsons) and place it in the corresponding folder src/datasets/map/ecg_grounding. A quick note is that `grounding_train_30k.json` is a subset of `ECG_Grounding_30k.json`, where `ECG_Grounding_30k.json` contains all 30k ECG grounding samples found in `grounding_train_30k.json`, with additional ECG conversational data from the ECG Instruct PULSE dataset.
-
-### ECG Byte Training
-
-We also implement training the BPE algorithm from [ECG-Byte](https://arxiv.org/abs/2412.14373). This should be trained only after preprocessing the MIMIC-IV base dataset. 
-Please execute `bash scripts/train_ecg_byte.sh`.
 
 ### Hugging Face upload
 
