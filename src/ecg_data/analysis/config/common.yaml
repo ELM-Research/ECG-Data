@@ -1,5 +1,7 @@
-seed: 0
+experiment: ouyang
 development: false
 num_cores: 64 # null uses the CPU count; set an integer to limit worker processes.
+files_per_batch: 1024 # Amortize worker communication without retaining reports.
+undefined_ratio: null # Explicit convention; the study does not specify it.
 
 save_path: /p01/whan/ECG-Data/src/ecg_data/analysis/software_v_human/results

@@ -9,6 +9,24 @@ We also do various data analysis available for anyone to try! Check out `src/ana
 
 2. To run just do `uv run $PATH_TO_FILE`. There are examples in `scripts/`
 
+### Software versus physician analysis
+
+```bash
+bash scripts/software_v_human.sh
+```
+
+Uses `src/ecg_data/analysis/config/software_v_human_heedb.yaml`, which inherits
+`common.yaml`. Select the study with `experiment: ouyang`; keep the same data
+settings across experiments. `development: true` runs all reports in one process.
+Otherwise, `num_cores` controls worker processes (`null` uses the CPU count).
+Workers read file batches and merge counts before calculating ratios.
+
+Results are saved to `<save_path>/ouyang/heedb.json`, with separate `heedb_old`
+and `heedb_new` results. Undefined ratios use `undefined_ratio: null`.
+Ouyang uses lowercase, unique, unordered statements and exact matching.
+Other studies can reuse `normalize_report` with `case`, `duplicates`, and `order`
+options and register their counting, merging, and summary functions in `EXPERIMENTS`.
+
 ### Adding New Datasets
 
 To add a dataset, create `<data>/<data>.py` with a class named `data.upper()`
