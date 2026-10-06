@@ -41,8 +41,8 @@ class ECG_QA:
 
     def preprocess_conversation(self, instance):
         answer = " ".join(instance["answer"])
-        turns = [{"from": "human", "value": instance["question"]},
-                {"from": "gpt", "value": answer},]
+        turns = [{"role": "user", "content": instance["question"]},
+                {"role": "assistant", "content": answer},]
         return preprocess_conversation(turns)
     
     def setup_ecg_qa(self, glob_paths):

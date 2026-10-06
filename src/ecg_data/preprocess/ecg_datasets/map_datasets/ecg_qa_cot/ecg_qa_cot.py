@@ -44,10 +44,10 @@ class ECG_QA_COT:
         question = instance["question"]
         answer = instance["answer"]
         turns = [
-                {"from": "human",
-                 "value": f"Clinical Context: {clinical_context}\nQuestion: {question}"},
-                {"from": "gpt",
-                 "value": f"<think>\n{cot}\n</think>\n\n<answer>{answer}</answer>"},]
+                {"role": "user",
+                 "content": f"Clinical Context: {clinical_context}\nQuestion: {question}"},
+                {"role": "assistant",
+                 "content": f"<think>\n{cot}\n</think>\n\n<answer>{answer}</answer>"},]
         return preprocess_conversation(turns)
 
     def parse_ecg_id(self, ecg_id: str):
