@@ -3,12 +3,3 @@ defaults:
 
 data_name: heedb
 data_path: /batch_data/heedb/preprocessed_250_10
-
-inspect_removed_terms:
-  - digitalis effect
-  - electronic atrial pacemaker
-  - electronic ventricular pacemaker
-  - suspect unspecified pacemaker failure
-  - ventricular tachycardia
-
-inspect_comparison: heedb_new
