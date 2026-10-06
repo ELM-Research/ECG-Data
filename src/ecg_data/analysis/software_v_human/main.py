@@ -34,7 +34,6 @@ if __name__ == "__main__":
         input()
 
 '''
-(ecg-data) bash-4.4$ bash scripts/software_v_human.sh 
 agh
 ['Normal sinus rhythm', 'Inferior infarct', ', age undetermined', 'Abnormal ECG', 'No previous ECGs available']
 ['Normal sinus rhythm', 'INFERO-APICAL INFARCT', ', age undetermined', 'Abnormal ECG', 'No previous ECGs available']
