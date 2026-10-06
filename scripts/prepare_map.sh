@@ -11,11 +11,11 @@
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/pretrain_mimic.yaml
 
-# # ECG QA COT
+# ECG QA COT
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/ecg_qa_cot.yaml
 
-# # ECG QA
+# ECG QA
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/ecg_qa.yaml
 
@@ -27,7 +27,7 @@
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/ecg_instruct_pulse.yaml
 
-# # ECG Grounding
+# ECG Grounding
 # uv run python src/ecg_data/preprocess/preprocess_map.py \
 # --config src/ecg_data/preprocess/config/map_datasets/ecg_grounding.yaml
 
