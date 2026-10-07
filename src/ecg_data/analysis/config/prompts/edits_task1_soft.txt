@@ -22,28 +22,6 @@ Here are some examples of groups for target string A:
 - [B] -> [C]: G4
 Note that we 
 
-## Task 2
-Given the same 2 reports, you will analyze the 2 reports as a whole.
-You will then categorize the pair of reports into one of the following categories:
-- unchanged: nothing added or deleted.
-- added_only: something added and nothing deleted.
-- deleted_only: something deleted and nothing added.
-- both: something added and something deleted.
-Here are some examples of report pairs and their corresponding categories for Task 2:
-- [A, B, C] -> [A, B, C]: unchanged
-- [A, D] -> [A, C]: both
-- [A, B, C] -> [B]: deleted_only
-- [B] -> [A, B]: added_only
-
-## Task 3
-Your last task for the same 2 reports will comprise of analyzing them as a whole.
-You will then categorize them as preferential or factual:
-- Preferential: Semantically and clinically, the 2 reports' contents are similar.
-- Factual: Semantically and clinically, the 2 reports' contents are very different.
-- Uncertain: You are not certain whether the 2 reports' contents are similar or different.
-- None: There is no difference between the 2 reports' contents
-After categorization, give a brief explanation of why you chose either preferential, uncertain, or factual. Ground your explanation in the clinical impact of the difference.
-
 ## Output
 Given these 3 tasks, the output format should strictly be the following:
 {
