@@ -1,5 +1,0 @@
-defaults:
-  - ../software_v_human/prompts/edits.yaml
-
-matching: exact # exact or semantic
-analysis: combined # combined, reports, statements, edit_types; metrics are calculated afterward
