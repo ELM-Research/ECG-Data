@@ -228,4 +228,5 @@ if __name__ == "__main__":
         raise ValueError("These plots require experiment: edits.")
     root = Path(cfg["save_path"]) / "edits"
     results = json.loads((root / f"{cfg['data_name']}.json").read_text())
-    plot_results(results, root / "figures" / cfg["data_name"], **cfg["plots"])
+    for source, metrics in results.items():
+        plot_results({source: metrics}, root / "figures" / source, **cfg["plots"])
