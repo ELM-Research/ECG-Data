@@ -8,8 +8,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
-from matplotlib.ticker import MultipleLocator, PercentFormatter
 
 from ecg_data.analysis.software_v_human.terms import TERMS
 from ecg_data.preprocess.config.load import get_config
@@ -67,80 +65,83 @@ def _percentage(numerator, denominator):
 
 
 def _plot_rates(results, rows, values, *, title, numerator, denominator, output, note, interpretation=None):
-    """Keep definitions, chart rows, and notes in separate layout regions."""
+    """Compare sources in compact columns with inline bars on a shared 0–100% scale."""
     sources = list(results)
-    labels = [fill(label, width=43) for _, label in rows]
-    row_heights = [max(len(sources) * 0.37 + 0.28, (label.count("\n") + 1) * 0.2 + 0.28) for label in labels]
-    body_height = max(1.25, sum(row_heights))
-    blocks = [(title, 18, "bold")]
-    if interpretation:
-        blocks.append((fill(interpretation, 125), 11, "normal"))
+    # Layout dimensions are inches, so text and row spacing stay consistent.
+    label_width, source_width, margin = 3.5, 2.8, 0.25
+    content_width = label_width + len(sources) * source_width
+    width = content_width + 2 * margin
+    labels = [fill(label, width=40) for _, label in rows]
+    row_heights = [max(0.46, (label.count("\n") + 1) * 0.17 + 0.16) for label in labels]
+    body_height = sum(row_heights)
+    wrap_width = int(content_width * 12)
+    heading, _, detail = title.partition(": ")
+    context = " · ".join(text for text in (detail, interpretation) if text)
+    blocks = [(fill(heading, int(content_width * 7)), 16, "bold")]
+    if context:
+        blocks.append((fill(context, wrap_width), 10, "normal"))
     blocks.extend([
-        (fill(f"Numerator: {numerator}", 125), 10.5, "normal"),
-        (fill(f"Denominator: {denominator}", 125), 10.5, "normal"),
+        (fill(f"Numerator: {numerator}", wrap_width), 9, "normal"),
+        (fill(f"Denominator: {denominator}", wrap_width), 9, "normal"),
     ])
-    block_heights = [(text.count("\n") + 1) * size / 72 * 1.5 + 0.1 for text, size, _ in blocks]
-    header_height = sum(block_heights) + 0.4
-    footer = fill(note, 145)
-    footer_height = 0.4 + (footer.count("\n") + 1) * 0.18
-    height = header_height + 0.35 + body_height + footer_height + 0.4
-    fig = plt.figure(figsize=(15, height), facecolor="white")
+    block_heights = [(text.count("\n") + 1) * size / 72 * 1.35 + 0.06 for text, size, _ in blocks]
+    header_height = sum(block_heights) + 0.03
+    source_labels = [fill(SOURCE_NAMES.get(source, source), width=28) for source in sources]
+    heading_height = max(label.count("\n") + 1 for label in source_labels) * 0.18 + 0.12
+    footer = fill("Bars: 0–100%. Counts: numerator / denominator. " + note, int(content_width * 16))
+    footer_height = 0.14 + (footer.count("\n") + 1) * 0.15
+    height = header_height + heading_height + body_height + footer_height + 2 * margin
+    fig = plt.figure(figsize=(width, height), facecolor="white")
     grid = fig.add_gridspec(
-        4, 3, height_ratios=(header_height, 0.35, body_height, footer_height),
-        width_ratios=(4.4, 5.3, 3.6), hspace=0, wspace=0.08,
-        left=0.035, right=0.98, top=1 - 0.2 / height, bottom=0.2 / height,
+        4, 1, height_ratios=(header_height, heading_height, body_height, footer_height),
+        hspace=0, left=margin / width, right=1 - margin / width,
+        top=1 - margin / height, bottom=margin / height,
     )
 
-    header = fig.add_subplot(grid[0, :])
+    header = fig.add_subplot(grid[0])
     header.set_axis_off()
     y = 1
-    for (text, size, weight), block_height in zip(blocks, block_heights):
-        header.text(0, y, text, va="top", fontsize=size, fontweight=weight, color="#253449")
+    for index, ((text, size, weight), block_height) in enumerate(zip(blocks, block_heights)):
+        header.text(0, y, text, va="top", fontsize=size, fontweight=weight,
+                    color="#253449" if index == 0 else "#64748b")
         y -= block_height / header_height
-    header.legend(
-        handles=[Patch(color=COLORS[index % len(COLORS)], label=SOURCE_NAMES.get(source, source))
-                 for index, source in enumerate(sources)],
-        loc="lower left", ncol=len(sources), frameon=False, borderaxespad=0, fontsize=10,
-    )
-    for column, text in enumerate(("REPORT CATEGORY / STATEMENT", "RATE", "PERCENT")):
-        heading = fig.add_subplot(grid[1, column])
-        heading.set_axis_off()
-        heading.text(0, 0.25, text, fontsize=8.5, fontweight="bold", color="#64748b")
-        if column == 2:
-            heading.text(1, 0.25, "NUMERATOR / DENOMINATOR", ha="right",
-                         fontsize=8.5, fontweight="bold", color="#64748b")
 
-    label_ax, rate_ax, count_ax = [fig.add_subplot(grid[2, column]) for column in range(3)]
-    for ax in (label_ax, rate_ax, count_ax):
-        ax.set(xlim=(0, 1), ylim=(body_height, 0), yticks=[])
-    label_ax.set_axis_off()
-    count_ax.set_axis_off()
-    rate_ax.spines[["top", "right", "left"]].set_visible(False)
-    rate_ax.spines["bottom"].set_color("#cbd5e1")
-    rate_ax.xaxis.set_major_locator(MultipleLocator(0.25))
-    rate_ax.xaxis.set_major_formatter(PercentFormatter(1, decimals=0))
-    rate_ax.tick_params(axis="x", labelsize=9, colors="#64748b", length=0, pad=8)
-    rate_ax.grid(axis="x", color="#e2e8f0", linewidth=0.7)
-    rate_ax.set_axisbelow(True)
+    heading = fig.add_subplot(grid[1])
+    heading.set(xlim=(0, content_width), ylim=(heading_height, 0))
+    heading.set_axis_off()
+    heading.text(0, heading_height - 0.1, "CATEGORY / STATEMENT", va="bottom",
+                 fontsize=8, fontweight="bold", color="#64748b")
+    for index, label in enumerate(source_labels):
+        x = label_width + index * source_width + 0.14
+        heading.text(x, heading_height - 0.1, label, va="bottom", fontsize=10,
+                     fontweight="bold", color=COLORS[index % len(COLORS)])
+    heading.axhline(heading_height - 0.04, color="#cbd5e1", linewidth=0.8)
+
+    body = fig.add_subplot(grid[2])
+    body.set(xlim=(0, content_width), ylim=(body_height, 0))
+    body.set_axis_off()
     position = 0
-    for index, ((key, _), label, row_height) in enumerate(zip(rows, labels, row_heights)):
+    for (key, _), label, row_height in zip(rows, labels, row_heights):
         center = position + row_height / 2
-        if index % 2 == 0:
-            for ax in (label_ax, rate_ax, count_ax):
-                ax.axhspan(position, position + row_height, color="#f5f7fa", zorder=0)
-        label_ax.text(0, center, label, va="center", fontsize=10.5, color="#253449")
+        body.text(0, center, label, va="center", fontsize=9.5, color="#253449")
         for source_index, source in enumerate(sources):
             n, d = values(results[source], key)
-            y = center + (source_index - (len(sources) - 1) / 2) * 0.37
+            left = label_width + source_index * source_width + 0.14
+            right = label_width + (source_index + 1) * source_width - 0.14
             color = COLORS[source_index % len(COLORS)]
-            rate_ax.barh(y, n / d if d else 0, height=0.23, color=color)
-            count_ax.text(0, y, _percentage(n, d), va="center", fontsize=10.5, fontweight="bold", color=color)
-            count_ax.text(1, y, f"{n:,} / {d:,}", ha="right", va="center", fontsize=10, color=color)
+            body.text(left, center - 0.06, _percentage(n, d), va="center", fontsize=10,
+                      fontweight="bold", color=color if d else "#64748b")
+            body.text(right, center - 0.06, f"{n:,} / {d:,}", ha="right", va="center",
+                      fontsize=8, color="#64748b")
+            if d:
+                body.barh(center + 0.11, right - left, left=left, height=0.045, color="#edf1f5")
+                body.barh(center + 0.11, (right - left) * n / d, left=left, height=0.045, color=color)
         position += row_height
+        body.axhline(position, color="#edf1f5", linewidth=0.6)
 
-    footer_ax = fig.add_subplot(grid[3, :])
+    footer_ax = fig.add_subplot(grid[3])
     footer_ax.set_axis_off()
-    footer_ax.text(0, 0, footer, va="bottom", fontsize=9, color="#64748b")
+    footer_ax.text(0, 0, footer, va="bottom", fontsize=8, color="#64748b")
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=180, facecolor="white")
     plt.close(fig)
