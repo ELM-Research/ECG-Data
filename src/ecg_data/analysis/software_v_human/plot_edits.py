@@ -205,13 +205,13 @@ def plot_results(results, output, *, top_terms):
     selections = (
         (output / "statements", ranked[:top_terms], "with the most additions + deletions across sources"),
         (output / "statements" / "terms", [term for term in ranked if term in reference_terms],
-         "matching terms.py exactly, ordered by additions + deletions across sources"),
+         "matching terms.py exactly"),
     )
     for directory, selected, description in selections:
         if not selected:
             continue
-        rows = [(term, term) for term in selected]
-        note = (f"Showing {len(selected)} statements {description}, in the same order on all statement plots in this set. "
+        rows = [(term, term) for term in sorted(selected)]
+        note = (f"Showing {len(selected)} statements {description}, in alphabetical order on all statement plots. "
                 "All statements remain in the saved analysis. Each source uses its own report pairs. "
                 "Undefined means the denominator is zero. " + counts)
         statement_cohort = (
