@@ -66,7 +66,7 @@ def _percentage(numerator, denominator):
     return "<0.1%" if 0 < value < 0.001 else f"{value:.1%}"
 
 
-def _plot_rates(results, rows, values, *, title, numerator, denominator, cohort, output, note, interpretation=None):
+def _plot_rates(results, rows, values, *, title, numerator, denominator, output, note, interpretation=None):
     """Keep definitions, chart rows, and notes in separate layout regions."""
     sources = list(results)
     labels = [fill(label, width=43) for _, label in rows]
@@ -78,7 +78,6 @@ def _plot_rates(results, rows, values, *, title, numerator, denominator, cohort,
     blocks.extend([
         (fill(f"Numerator: {numerator}", 125), 10.5, "normal"),
         (fill(f"Denominator: {denominator}", 125), 10.5, "normal"),
-        (fill(cohort, 125), 10.5, "normal"),
     ])
     block_heights = [(text.count("\n") + 1) * size / 72 * 1.5 + 0.1 for text, size, _ in blocks]
     header_height = sum(block_heights) + 0.4
@@ -161,11 +160,6 @@ def plot_results(results, output, *, top_terms):
     order = {source: index for index, source in enumerate(SOURCE_NAMES)}
     results = {source: results[source] for source in sorted(results, key=lambda source: (order.get(source, len(order)), source))}
     output = Path(output)
-    cohort = "Included pairs: both reports are present and are lists of strings."
-    if policies == {"exclude"}:
-        cohort += " Each report must contain at least one nonblank statement."
-    else:
-        cohort += " Empty reports are included under the configured compare policy."
     counts = " | ".join(
         f"{SOURCE_NAMES.get(source, source)}: {metrics['included_reports']:,} included / {metrics['input_reports']:,} input pairs"
         for source, metrics in results.items()
@@ -174,14 +168,14 @@ def plot_results(results, output, *, top_terms):
         results, [("edited", "Any physician edit")],
         lambda metrics, _: (metrics["edited_reports"], metrics["included_reports"]),
         title="Report edit rate", numerator="Included pairs with any statement added or deleted.",
-        denominator="All included report pairs.", cohort=cohort,
+        denominator="All included report pairs.",
         output=output / "01_edit_rate.png", note=counts,
     )
     _plot_rates(
         results, list(CHANGE_NAMES.items()),
         lambda metrics, key: (metrics["report_counts"][key], metrics["included_reports"]),
         title="Types of report changes", numerator="Included pairs in the stated change category.",
-        denominator="All included report pairs.", cohort=cohort,
+        denominator="All included report pairs.",
         output=output / "02_change_types.png",
         note="Each included pair belongs to exactly one category. " + counts,
     )
@@ -191,7 +185,6 @@ def plot_results(results, output, *, top_terms):
         title="Input quality: empty, missing, and malformed reports",
         numerator="Input pairs with the stated issue. Each pair belongs to at most one issue category.",
         denominator="All input report pairs read by this analysis, before exclusions.",
-        cohort="Empty: no nonblank statements. Missing: either report is null or absent. Malformed: a present report is not a list of strings.",
         output=output / "03_input_quality.png",
         note="Missing takes priority over malformed; empty counts require two valid lists. Records removed by upstream preprocessing are not counted.",
     )
@@ -214,15 +207,12 @@ def plot_results(results, output, *, top_terms):
         note = (f"Showing {len(selected)} statements {description}, in alphabetical order on all statement plots. "
                 "All statements remain in the saved analysis. Each source uses its own report pairs. "
                 "Undefined means the denominator is zero. " + counts)
-        statement_cohort = (
-            "Reference: physician report. Evaluated: software report. Higher is better. "
-            "Includes entirely unchanged reports. " + cohort
-        )
+
         for name, (numerator, denominator, title, interpretation, numerator_meaning, denominator_meaning) in TERM_METRICS.items():
             _plot_rates(
                 results, rows,
                 lambda metrics, term: (metrics["terms"][term][numerator], sum(metrics["terms"][term][key] for key in denominator)),
-                title=title, numerator=numerator_meaning, denominator=denominator_meaning, cohort=statement_cohort,
+                title=title, numerator=numerator_meaning, denominator=denominator_meaning,
                 interpretation=interpretation,
                 output=directory / f"{name}.png", note=note,
             )
