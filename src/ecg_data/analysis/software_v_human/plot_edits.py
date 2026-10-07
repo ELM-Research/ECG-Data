@@ -64,7 +64,7 @@ def _percentage(numerator, denominator):
     return "<0.1%" if 0 < value < 0.001 else f"{value:.1%}"
 
 
-def _plot_rates(results, rows, values, *, title, numerator, denominator, output, note, interpretation=None):
+def _plot_rates(results, rows, values, *, title, numerator, denominator, output, interpretation=None):
     """Compare sources in compact columns with inline bars on a shared 0–100% scale."""
     sources = list(results)
     # Layout dimensions are inches, so text and row spacing stay consistent.
@@ -88,12 +88,10 @@ def _plot_rates(results, rows, values, *, title, numerator, denominator, output,
     header_height = sum(block_heights) + 0.03
     source_labels = [fill(SOURCE_NAMES.get(source, source), width=28) for source in sources]
     heading_height = max(label.count("\n") + 1 for label in source_labels) * 0.18 + 0.12
-    footer = fill("Bars: 0–100%. Counts: numerator / denominator. " + note, int(content_width * 16))
-    footer_height = 0.14 + (footer.count("\n") + 1) * 0.15
-    height = header_height + heading_height + body_height + footer_height + 2 * margin
+    height = header_height + heading_height + body_height + 2 * margin
     fig = plt.figure(figsize=(width, height), facecolor="white")
     grid = fig.add_gridspec(
-        4, 1, height_ratios=(header_height, heading_height, body_height, footer_height),
+        3, 1, height_ratios=(header_height, heading_height, body_height),
         hspace=0, left=margin / width, right=1 - margin / width,
         top=1 - margin / height, bottom=margin / height,
     )
@@ -139,9 +137,6 @@ def _plot_rates(results, rows, values, *, title, numerator, denominator, output,
         position += row_height
         body.axhline(position, color="#edf1f5", linewidth=0.6)
 
-    footer_ax = fig.add_subplot(grid[3])
-    footer_ax.set_axis_off()
-    footer_ax.text(0, 0, footer, va="bottom", fontsize=8, color="#64748b")
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=180, facecolor="white")
     plt.close(fig)
@@ -161,16 +156,12 @@ def plot_results(results, output, *, top_terms):
     order = {source: index for index, source in enumerate(SOURCE_NAMES)}
     results = {source: results[source] for source in sorted(results, key=lambda source: (order.get(source, len(order)), source))}
     output = Path(output)
-    counts = " | ".join(
-        f"{SOURCE_NAMES.get(source, source)}: {metrics['included_reports']:,} included / {metrics['input_reports']:,} input pairs"
-        for source, metrics in results.items()
-    )
     _plot_rates(
         results, [("edited", "Any physician edit")],
         lambda metrics, _: (metrics["edited_reports"], metrics["included_reports"]),
         title="Report edit rate", numerator="Included pairs with any statement added or deleted.",
         denominator="All included report pairs.",
-        output=output / "01_edit_rate.png", note=counts,
+        output=output / "01_edit_rate.png",
     )
     _plot_rates(
         results, list(CHANGE_NAMES.items()),
@@ -178,7 +169,6 @@ def plot_results(results, output, *, top_terms):
         title="Types of report changes", numerator="Included pairs in the stated change category.",
         denominator="All included report pairs.",
         output=output / "02_change_types.png",
-        note="Each included pair belongs to exactly one category. " + counts,
     )
     _plot_rates(
         results, list(INPUT_NAMES.items()),
@@ -187,7 +177,6 @@ def plot_results(results, output, *, top_terms):
         numerator="Input pairs with the stated issue. Each pair belongs to at most one issue category.",
         denominator="All input report pairs read by this analysis, before exclusions.",
         output=output / "03_input_quality.png",
-        note="Missing takes priority over malformed; empty counts require two valid lists. Records removed by upstream preprocessing are not counted.",
     )
     vocabulary = set().union(*(metrics["terms"] for metrics in results.values()))
     edits = {
@@ -197,17 +186,13 @@ def plot_results(results, output, *, top_terms):
     ranked = sorted(vocabulary, key=lambda term: (-edits[term], term))
     reference_terms = {term for terms in TERMS.values() for term in terms}
     selections = (
-        (output / "statements", ranked[:top_terms], "with the most additions + deletions across sources"),
-        (output / "statements" / "terms", [term for term in ranked if term in reference_terms],
-         "matching terms.py exactly"),
+        (output / "statements", ranked[:top_terms]),
+        (output / "statements" / "terms", [term for term in ranked if term in reference_terms]),
     )
-    for directory, selected, description in selections:
+    for directory, selected in selections:
         if not selected:
             continue
         rows = [(term, term) for term in sorted(selected)]
-        note = (f"Showing {len(selected)} statements {description}, in alphabetical order on all statement plots. "
-                "All statements remain in the saved analysis. Each source uses its own report pairs. "
-                "Undefined means the denominator is zero. " + counts)
 
         for name, (numerator, denominator, title, interpretation, numerator_meaning, denominator_meaning) in TERM_METRICS.items():
             _plot_rates(
@@ -215,7 +200,7 @@ def plot_results(results, output, *, top_terms):
                 lambda metrics, term: (metrics["terms"][term][numerator], sum(metrics["terms"][term][key] for key in denominator)),
                 title=title, numerator=numerator_meaning, denominator=denominator_meaning,
                 interpretation=interpretation,
-                output=directory / f"{name}.png", note=note,
+                output=directory / f"{name}.png",
             )
     for name in ("disagreement", "additions", "deletions"):
         (output / "statements" / f"{name}.png").unlink(missing_ok=True)
