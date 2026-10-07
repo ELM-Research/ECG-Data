@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.ticker import MultipleLocator, PercentFormatter
 
+from ecg_data.analysis.software_v_human.terms import TERMS
 from ecg_data.preprocess.config.load import get_config
 
 SOURCE_NAMES = {"agh": "AGH", "heedb_old": "HEEDB old software", "heedb_new": "HEEDB new software"}
@@ -147,7 +148,7 @@ def _plot_rates(results, rows, values, *, title, numerator, denominator, cohort,
 
 
 def plot_results(results, output, *, top_terms):
-    """Keep the full saved analysis; limit only the statement plots."""
+    """Plot top-K statements and exact matches from terms.py."""
     if not results or any(metrics.get("study") != "edits" for metrics in results.values()):
         raise ValueError("Expected saved results from experiment: edits.")
     if any(metrics.get("normalization", {}).get("blanks") != "drop" for metrics in results.values()):
@@ -199,10 +200,18 @@ def plot_results(results, output, *, top_terms):
         term: sum(metrics["terms"][term]["edited_report_count"] for metrics in results.values())
         for term in vocabulary
     }
-    selected = sorted(vocabulary, key=lambda term: (-edits[term], term))[:top_terms]
-    if selected:
+    ranked = sorted(vocabulary, key=lambda term: (-edits[term], term))
+    reference_terms = {term for terms in TERMS.values() for term in terms}
+    selections = (
+        (output / "statements", ranked[:top_terms], "with the most additions + deletions across sources"),
+        (output / "statements" / "terms", [term for term in ranked if term in reference_terms],
+         "matching terms.py exactly, ordered by additions + deletions across sources"),
+    )
+    for directory, selected, description in selections:
+        if not selected:
+            continue
         rows = [(term, term) for term in selected]
-        note = (f"Showing {len(selected)} statements with the most additions + deletions across sources, in the same order on all statement plots. "
+        note = (f"Showing {len(selected)} statements {description}, in the same order on all statement plots in this set. "
                 "All statements remain in the saved analysis. Each source uses its own report pairs. "
                 "Undefined means the denominator is zero. " + counts)
         statement_cohort = (
@@ -215,7 +224,7 @@ def plot_results(results, output, *, top_terms):
                 lambda metrics, term: (metrics["terms"][term][numerator], sum(metrics["terms"][term][key] for key in denominator)),
                 title=title, numerator=numerator_meaning, denominator=denominator_meaning, cohort=statement_cohort,
                 interpretation=interpretation,
-                output=output / "statements" / f"{name}.png", note=note,
+                output=directory / f"{name}.png", note=note,
             )
     for name in ("disagreement", "additions", "deletions"):
         (output / "statements" / f"{name}.png").unlink(missing_ok=True)

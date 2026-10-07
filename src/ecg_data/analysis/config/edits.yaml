@@ -6,4 +6,4 @@ study_options:
   empty_reports: exclude # Log empty pairs separately; they may indicate preprocessing errors.
 
 plots:
-  top_terms: 60 # One plot per metric, with the same statements; analysis saves every statement.
+  top_terms: 60 # Top-K plots; a second set includes all exact matches from terms.py.
