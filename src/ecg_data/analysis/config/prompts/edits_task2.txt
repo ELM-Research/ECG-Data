@@ -10,27 +10,28 @@ In both reports, A, B, and C are variables that represent strings of characters,
 
 ## Task
 Given these 2 reports, you will analyze the 2 reports as a whole.
+An addition is a list element present only in the physician report. A deletion is a list element present only in the software report.
+Compare entire list elements character for character, including fragments and punctuation. Substrings, abbreviations, synonyms, and clinically equivalent strings do not count as matches. Compare the supplied strings without interpreting their clinical meaning.
 You will then categorize the pair of reports into one of the following categories:
-- unchanged: nothing added or deleted.
-- added_only: something added and nothing deleted.
-- deleted_only: something deleted and nothing added.
-- both: something added and something deleted.
-Here are some examples of report pairs and their corresponding categories for Task 2:
+- unchanged: no additions or deletions.
+- added_only: at least one addition and no deletions.
+- deleted_only: at least one deletion and no additions.
+- both: at least one addition and at least one deletion.
+Here are some examples of report pairs and their corresponding categories for Task 2, where each arrow means Software Report -> Physician Report:
 - [A, B, C] -> [A, B, C]: unchanged
 - [A, D] -> [A, C]: both
 - [A, B, C] -> [B]: deleted_only
 - [B] -> [A, B]: added_only
+For example, replacing "atrial fibrillation" with "afib" is categorized as both, even though their meanings are similar and the report lengths are unchanged.
 
 ## Output
-The output format should strictly be the following:
+The output should strictly be a valid JSON object with exactly one of the categories above, using the following format:
 {
   "category": "unchanged",
-  "explanation": "3-5 sentence explanation"
 }
-Do not output anything other than this dictionary.
+Do not output anything other than this JSON object.
 
 ## Input
 Now, lets start the task! Here are the inputs:
-Target: {target}
 Physician Report: {physician_report}
 Software Report: {software_report}

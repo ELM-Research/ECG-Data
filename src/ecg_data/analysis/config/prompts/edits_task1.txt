@@ -11,26 +11,26 @@ In both reports, A, B, and C are variables that represent strings of characters,
 ## Task
 Given these 2 reports, you will also receive a target string. Let us denote target string as A for this example.
 Given A, you will then categorize A into one of the following groups:
-- G1: present in software and physician reports.
-- G2: present only in software.
-- G3: present only in physician.
+- G1: present in software and physician reports; retained.
+- G2: present only in software; deleted.
+- G3: present only in physician; added.
 - G4: absent from both.
-Here are some examples of groups for target string A:
+These groups describe only the target string, regardless of changes to other strings in the reports. G4 does not mean the reports are empty.
+Here are some examples of groups for target string A, where each arrow means Software Report -> Physician Report:
 - [A, B] -> [A, C]: G1
 - [A, B] -> [B]: G2
 - [B] -> [A, B]: G3
 - [B] -> [C]: G4
-Note that the target string A should be exactly the same as the comparing string, character for character, to be identified as the same.
+Note that the target string A must exactly match an entire list element, character for character, to be considered present. Substrings, abbreviations, synonyms, and clinically equivalent strings do not count as matches. Compare the supplied strings without interpreting their clinical meaning.
 For example, if we have a software report ["abnormal ecg", "atrial fibrillation"] and a physician report ["abnormal ecg", "afib"], "afib" and "atrial fibrillation" should be treated as different.
-Additionally, after categorization, give a brief explanation of why you chose the group for the particular statement.
+Likewise, "atrial fibrillation" does not match "atrial fibrillation with rapid ventricular response".
 
 ## Output
-The output format should strictly be the following:
+The output should strictly be a valid JSON object with exactly one of the groups above as its category, using the following format:
 {
   "category": "G1",
-  "explanation": "3-5 sentence explanation"
 }
-Do not output anything other than this dictionary.
+Do not output anything other than this JSON object.
 
 ## Input
 Now, lets start the task! Here are the inputs:
