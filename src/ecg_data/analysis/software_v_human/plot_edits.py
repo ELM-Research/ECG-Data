@@ -143,7 +143,7 @@ def _plot_rates(results, rows, values, *, title, numerator, denominator, output,
 
 
 def plot_results(results, output, *, top_terms):
-    """Plot top-K statements and exact matches from terms.py."""
+    """Plot top-K statements and terms.py matches, together and by category."""
     if not results or any(metrics.get("study") != "edits" for metrics in results.values()):
         raise ValueError("Expected saved results from experiment: edits.")
     if any(metrics.get("normalization", {}).get("blanks") != "drop" for metrics in results.values()):
@@ -185,11 +185,19 @@ def plot_results(results, output, *, top_terms):
     }
     ranked = sorted(vocabulary, key=lambda term: (-edits[term], term))
     reference_terms = {term for terms in TERMS.values() for term in terms}
-    selections = (
-        (output / "statements", ranked[:top_terms]),
-        (output / "statements" / "terms", [term for term in ranked if term in reference_terms]),
+    selections = [
+        (output / "statements", ranked[:top_terms], None),
+        (output / "statements" / "terms", [term for term in ranked if term in reference_terms], None),
+    ]
+    selections.extend(
+        (
+            output / "statements" / "terms" / category.lower().replace(" / ", "_").replace(" ", "_"),
+            [term for term in terms if term in vocabulary],
+            category,
+        )
+        for category, terms in TERMS.items()
     )
-    for directory, selected in selections:
+    for directory, selected, category in selections:
         if not selected:
             continue
         rows = [(term, term) for term in sorted(selected)]
@@ -198,7 +206,8 @@ def plot_results(results, output, *, top_terms):
             _plot_rates(
                 results, rows,
                 lambda metrics, term: (metrics["terms"][term][numerator], sum(metrics["terms"][term][key] for key in denominator)),
-                title=title, numerator=numerator_meaning, denominator=denominator_meaning,
+                title=f"{category} — {title}" if category else title,
+                numerator=numerator_meaning, denominator=denominator_meaning,
                 interpretation=interpretation,
                 output=directory / f"{name}.png",
             )
