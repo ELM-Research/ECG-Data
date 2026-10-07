@@ -28,20 +28,29 @@ INPUT_NAMES = {
     "invalid": "Malformed report",
 }
 TERM_METRICS = {
-    "disagreement": (
-        "edited_report_count", "mentioned_report_count", "Statement disagreement",
-        "Included pairs where the physician added or deleted this statement.",
-        "Included pairs containing this statement in either the software or physician report.",
+    "sensitivity": (
+        "retained", ("retained", "added"), "Sensitivity: G1 / (G1 + G3)",
+        "When the physician includes a statement, how often does software include it?",
+        "G1: statement present in both software and physician reports.",
+        "G1 + G3: statement present in the physician report.",
     ),
-    "additions": (
-        "added", "software_absent_report_count", "Physician additions",
-        "Included pairs where the physician added this statement.",
-        "Included pairs where the software report does not contain this statement.",
+    "specificity": (
+        "absent_from_both", ("deleted", "absent_from_both"), "Specificity: G4 / (G2 + G4)",
+        "When the physician excludes a statement, how often does software exclude it?",
+        "G4: statement absent from both software and physician reports.",
+        "G2 + G4: statement absent from the physician report.",
     ),
-    "deletions": (
-        "deleted", "software_report_count", "Physician deletions",
-        "Included pairs where the physician deleted this statement.",
-        "Included pairs where the software report contains this statement.",
+    "ppv": (
+        "retained", ("retained", "deleted"), "Positive predictive value (PPV): G1 / (G1 + G2)",
+        "When software includes a statement, how often does the physician retain it?",
+        "G1: statement present in both software and physician reports.",
+        "G1 + G2: statement present in the software report.",
+    ),
+    "npv": (
+        "absent_from_both", ("added", "absent_from_both"), "Negative predictive value (NPV): G4 / (G3 + G4)",
+        "When software excludes a statement, how often does the physician also exclude it?",
+        "G4: statement absent from both software and physician reports.",
+        "G3 + G4: statement absent from the software report.",
     ),
 }
 COLORS = ("#386b96", "#c17735", "#43816c")
@@ -51,21 +60,25 @@ def _percentage(numerator, denominator):
     if not denominator:
         return "Undefined"
     value = numerator / denominator
+    if 0.999 < value < 1:
+        return ">99.9%"
     return "<0.1%" if 0 < value < 0.001 else f"{value:.1%}"
 
 
-def _plot_rates(results, rows, values, *, title, numerator, denominator, cohort, output, note):
+def _plot_rates(results, rows, values, *, title, numerator, denominator, cohort, output, note, interpretation=None):
     """Keep definitions, chart rows, and notes in separate layout regions."""
     sources = list(results)
     labels = [fill(label, width=43) for _, label in rows]
     row_heights = [max(len(sources) * 0.37 + 0.28, (label.count("\n") + 1) * 0.2 + 0.28) for label in labels]
     body_height = max(1.25, sum(row_heights))
-    blocks = [
-        (title, 18, "bold"),
+    blocks = [(title, 18, "bold")]
+    if interpretation:
+        blocks.append((fill(interpretation, 125), 11, "normal"))
+    blocks.extend([
         (fill(f"Numerator: {numerator}", 125), 10.5, "normal"),
         (fill(f"Denominator: {denominator}", 125), 10.5, "normal"),
         (fill(cohort, 125), 10.5, "normal"),
-    ]
+    ])
     block_heights = [(text.count("\n") + 1) * size / 72 * 1.5 + 0.1 for text, size, _ in blocks]
     header_height = sum(block_heights) + 0.4
     footer = fill(note, 145)
@@ -186,18 +199,26 @@ def plot_results(results, output, *, top_terms):
         term: sum(metrics["terms"][term]["edited_report_count"] for metrics in results.values())
         for term in vocabulary
     }
-    selected = sorted((term for term in vocabulary if edits[term]), key=lambda term: (-edits[term], term))[:top_terms]
+    selected = sorted(vocabulary, key=lambda term: (-edits[term], term))[:top_terms]
     if selected:
         rows = [(term, term) for term in selected]
         note = (f"Showing {len(selected)} statements with the most additions + deletions across sources, in the same order on all statement plots. "
-                "All statements remain in the saved analysis. Each source uses its own report pairs. " + counts)
-        for name, (numerator, denominator, title, numerator_meaning, denominator_meaning) in TERM_METRICS.items():
+                "All statements remain in the saved analysis. Each source uses its own report pairs. "
+                "Undefined means the denominator is zero. " + counts)
+        statement_cohort = (
+            "Reference: physician report. Evaluated: software report. Higher is better. "
+            "Includes entirely unchanged reports. " + cohort
+        )
+        for name, (numerator, denominator, title, interpretation, numerator_meaning, denominator_meaning) in TERM_METRICS.items():
             _plot_rates(
                 results, rows,
-                lambda metrics, term: (metrics["terms"][term][numerator], metrics["terms"][term][denominator]),
-                title=title, numerator=numerator_meaning, denominator=denominator_meaning, cohort=cohort,
+                lambda metrics, term: (metrics["terms"][term][numerator], sum(metrics["terms"][term][key] for key in denominator)),
+                title=title, numerator=numerator_meaning, denominator=denominator_meaning, cohort=statement_cohort,
+                interpretation=interpretation,
                 output=output / "statements" / f"{name}.png", note=note,
             )
+    for name in ("disagreement", "additions", "deletions"):
+        (output / "statements" / f"{name}.png").unlink(missing_ok=True)
     print(f"Saved edits-study figures to {output}")
 
 
