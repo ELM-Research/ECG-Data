@@ -27,6 +27,47 @@ Ouyang uses lowercase, unique, unordered statements and exact matching.
 Other studies can reuse `normalize_report` with `case`, `duplicates`, and `order`
 options and register their counting, merging, and summary functions in `EXPERIMENTS`.
 
+### LLM report-edit analysis
+
+Set `llm.model` and the data paths in `src/ecg_data/analysis/config/llm_edits.yaml`, then run:
+
+```bash
+export OPENROUTER_API_KEY='your-key'
+bash scripts/llm_edits.sh
+```
+
+Uses the existing `edits_task.txt` prompt with lowercase statements and blanks
+removed. Deduplication keeps the first occurrence; LLM inputs preserve report order.
+Empty, missing, and invalid pairs are counted before exclusion. Literal comparison
+still ignores order, matching the rules analysis. Unchanged pairs need no API call;
+changed pairs receive `preferential`, `factual`, or `uncertain`.
+
+OpenRouter requests use [JSON mode](https://openrouter.ai/docs/api_reference/overview).
+Responses must contain exactly `category` (one of those three labels) and a
+nonempty string `explanation`. The prompt requests 3–5 sentences; validation checks
+the JSON structure, not sentence count or clinical correctness. Invalid responses
+are returned to the model with a brief correction. `max_attempts: 3` allows three
+total calls per pair; exhausted pairs are logged as skipped. Transient request
+errors also consume attempts; key, credit, and model configuration errors stop the run.
+
+`development: true` processes one pair, prints its inputs and outputs, then waits
+for Enter (`q` stops). Set it to `false` for concurrent batches controlled by
+`reports_per_batch`; each API request still contains one pair.
+
+Each run saves to `<save_path>/llm_edits/<data_name>/<UTC-run-id>/`:
+
+- `pairs.jsonl`: source/file/index, normalized reports, literal changes, category,
+  explanation, status, and every API response/error, including usage when supplied.
+- `summary.json`: counts and rates per source, including input quality and skips.
+  Category rates divide by successfully classified changed pairs; edit rate divides
+  by included pairs; coverage and skip rate divide by changed pairs. Every
+  denominator is saved. Undefined ratios use `undefined_ratio`.
+- `run.json`: exact prompt, model settings, literal-comparison and LLM-input
+  normalization, and completion status.
+
+Pair records are flushed in input order; summaries are saved after each batch.
+Separate run folders preserve previous results. No plotting or resume logic is added.
+
 ### Adding New Datasets
 
 To add a dataset, create `<data>/<data>.py` with a class named `data.upper()`

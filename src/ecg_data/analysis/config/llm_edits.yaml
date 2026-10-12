@@ -1,0 +1,17 @@
+defaults:
+  - ./software_v_human_agh.yaml
+
+experiment: llm_edits
+development: false # Print and pause after each pair; false enables concurrent batches.
+reports_per_batch: 8 # One pair per request; at most this many concurrent requests.
+
+study_options:
+  empty_reports: exclude
+
+llm:
+  # model: nvidia/nemotron-3-ultra-550b-a55b:free # Set your OpenRouter model ID (provider/model).
+  model: xiaomi/mimo-v2.6-pro
+  max_attempts: 3 # Total attempts per changed pair, including the first call.
+  temperature: 0
+  max_tokens: 1024
+  timeout: 120 # Seconds per HTTP request.

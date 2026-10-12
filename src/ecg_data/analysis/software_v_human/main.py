@@ -6,7 +6,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from ecg_data.analysis.software_v_human import edits, ouyang
+from ecg_data.analysis.software_v_human import edits, llm_edits, ouyang
 from ecg_data.analysis.software_v_human.reports import read_reports, report_files
 from ecg_data.preprocess.config.load import get_config
 
@@ -25,6 +25,8 @@ def _count_batch(paths, *, data_name, experiment, options):
 
 def run_analysis(cfg):
     experiment = cfg["experiment"]
+    if experiment == "llm_edits":
+        return llm_edits.run_analysis(cfg)
     batch_size = cfg["files_per_batch"]
     cores = cfg["num_cores"]
     options = cfg.get("study_options", {})
