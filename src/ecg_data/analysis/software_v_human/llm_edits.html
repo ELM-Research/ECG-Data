@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM edit review</title>
+<style>
+  :root { color-scheme: light; --ink: #253449; --muted: #64748b; --blue: #386b96; --line: #dce4eb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f7fa; color: var(--ink); font: 14px/1.55 system-ui, sans-serif; }
+  main { max-width: 1480px; margin: auto; padding: 32px; }
+  h1, h2, h3, p { margin: 0 0 12px; }
+  h1 { font-size: 30px; letter-spacing: -1px; line-height: 1.2; }
+  h2 { font-size: 18px; } h3 { font-size: 14px; }
+  .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 1.8px; color: var(--blue); font-weight: 700; }
+  .muted, small { color: var(--muted); } small { font-size: 12px; }
+  .topline, .between { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+  .topline { align-items: start; margin-bottom: 20px; }
+  .panel, .stat { background: white; border: 1px solid var(--line); border-radius: 12px; }
+  .panel { padding: 20px; margin-bottom: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 18px 0; }
+  .stat { padding: 14px 18px; } .stat strong { display: block; font-size: 26px; letter-spacing: -.7px; }
+  .rates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin: 12px 0; }
+  .track { height: 4px; background: #edf1f5; border-radius: 4px; margin-top: 8px; }
+  .track span { display: block; height: 100%; background: var(--blue); border-radius: inherit; }
+  .filters { display: grid; grid-template-columns: minmax(260px, 2fr) repeat(4, 1fr); gap: 12px; }
+  label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+  input, select, button { font: inherit; color: var(--ink); }
+  input, select { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 7px; background: white; padding: 10px; }
+  input:focus, select:focus, button:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  button { cursor: pointer; border: 1px solid var(--line); border-radius: 7px; background: white; padding: 7px 12px; }
+  button:disabled { opacity: .4; cursor: default; }
+  .workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
+  .records { padding: 0; overflow: hidden; }
+  .records header, .records footer { padding: 14px; }
+  #list { max-height: 690px; overflow: auto; }
+  .record { display: block; width: 100%; text-align: left; border: 0; border-top: 1px solid #edf1f5; border-radius: 0; padding: 12px 14px; }
+  .record:hover { background: #f6f9fc; } .record[aria-current="true"] { background: #edf4fa; box-shadow: inset 3px 0 var(--blue); }
+  .record small { display: block; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { display: inline-block; border-radius: 5px; padding: 2px 7px; font-size: 11px; font-weight: 650; background: #edf1f5; }
+  .factual { background: #e8f0f8; color: #386b96; } .preferential { background: #e8f3ee; color: #336b58; }
+  .uncertain, .skipped { background: #fbefdc; color: #8d5b20; }
+  .reports { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0; }
+  .report { border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .report ul { padding: 0; list-style: none; margin: 10px 0 0; }
+  .report li { padding: 7px 9px; border-radius: 4px; margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .added { background: #eaf4ef; border-left: 3px solid #43816c; }
+  .deleted { background: #fbefeb; border-left: 3px solid #c17735; }
+  mark { background: #ffe59a; color: #253449; border-radius: 2px; }
+  .explanation { border-left: 3px solid var(--blue); padding: 4px 0 4px 16px; margin-bottom: 22px; }
+  .prose { white-space: pre-wrap; overflow-wrap: anywhere; }
+  details { border-top: 1px solid var(--line); padding: 12px 0; }
+  summary { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+  details > div, details > pre { margin-top: 12px; }
+  pre { font-size: 12px; padding: 14px; background: #f5f7fa; border-radius: 6px; overflow: auto; max-height: 440px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .error { color: #9b4e31; } .notice { color: #8d5b20; margin: 10px 0 0; }
+  .empty { padding: 38px 20px; text-align: center; color: var(--muted); }
+  .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .gallery img { width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+  a { color: var(--blue); } .identity { overflow-wrap: anywhere; }
+  @media (max-width: 1000px) { .filters { grid-template-columns: repeat(2, 1fr); } .filters label:first-child { grid-column: 1 / -1; } .workspace { grid-template-columns: 250px minmax(0, 1fr); } }
+  @media (max-width: 700px) { main { padding: 16px; } .topline { display: block; } .stats { grid-template-columns: repeat(2, 1fr); } .rates, .workspace, .reports, .gallery { grid-template-columns: 1fr; } #list { max-height: 250px; } .panel { padding: 16px; } .records { padding: 0; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="topline">
+    <div><p class="eyebrow">ECG · Software → physician</p><h1>LLM edit review</h1><p id="model" class="muted"></p></div>
+    <div><span class="badge">Offline snapshot</span><p id="snapshot" class="muted"></p></div>
+  </header>
+  <details class="panel"><summary>Run settings &amp; prompt</summary><pre id="run"></pre></details>
+  <div id="stats" class="stats"></div>
+  <section class="panel" aria-label="Category rates">
+    <div class="between"><h2>Meaning of the edits</h2><small>Selected source · before search filters</small></div>
+    <div id="rates" class="rates"></div>
+    <small>Category / successfully classified changed pairs. Skipped pairs are excluded. Factual means clinical meaning changed, not verified correction.</small>
+    <p id="coverage" class="muted"></p>
+  </section>
+  <section class="panel" aria-label="Search and filters">
+    <div class="filters">
+      <label>Exact word or phrase<input id="query" type="search" placeholder="e.g. atrial fibrillation" aria-describedby="search-help"></label>
+      <label>Source<select id="source"><option value="">All sources</option></select></label>
+      <label>Status<select id="status"><option value="">All statuses</option></select></label>
+      <label>Category<select id="category"><option value="">All categories</option></select></label>
+      <label>Literal change<select id="change"><option value="">All changes</option></select></label>
+    </div>
+    <small id="search-help">Whole words or phrases within either report item; case ignored, punctuation and internal spacing preserved. No partial words or synonyms. Reports absent from saved records cannot match.</small>
+  </section>
+  <div class="workspace">
+    <aside class="panel records" aria-label="Matching pairs">
+      <header class="between"><strong id="matches" aria-live="polite"></strong><button id="reset">Reset</button></header>
+      <div id="list"></div>
+      <footer class="between"><button id="previous" aria-label="Previous page">←</button><small id="page"></small><button id="next" aria-label="Next page">→</button></footer>
+    </aside>
+    <article id="detail" class="panel" aria-label="Selected pair"></article>
+  </div>
+  <details class="panel"><summary>Static plots · full snapshot</summary><div id="figures" class="gallery"></div></details>
+</main>
+<script id="data" type="application/json"><!-- SNAPSHOT --></script>
+<script>
+  const data = JSON.parse(document.getElementById('data').textContent);
+  const $ = id => document.getElementById(id);
+  const escape = value => String(value).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const json = value => escape(JSON.stringify(value, null, 2));
+  const number = value => value.toLocaleString();
+  const title = value => value[0].toUpperCase() + value.slice(1);
+  const name = (group, key) => data.names[group][key] || key;
+  const percent = (n, d) => !d ? 'Undefined' : n && n / d < .001 ? '<0.1%' : n / d > .999 && n < d ? '>99.9%' : `${(100 * n / d).toFixed(1)}%`;
+  const badge = value => `<span class="badge ${escape(value)}">${escape(title(value))}</span>`;
+  const pageSize = 30;
+  let matches = [], page = 0, selected = null, query = null;
+
+  function phrasePattern(text) {
+    text = text.trim();
+    if (!text) return null;
+    const literal = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?<![\\p{L}\\p{N}_])${literal}(?![\\p{L}\\p{N}_])`, 'iu');
+  }
+
+  function highlight(text) {
+    if (!query) return escape(text);
+    const pattern = new RegExp(query.source, 'giu');
+    let html = '', end = 0;
+    for (const match of text.matchAll(pattern)) {
+      html += escape(text.slice(end, match.index)) + `<mark>${escape(match[0])}</mark>`;
+      end = match.index + match[0].length;
+    }
+    return html + escape(text.slice(end));
+  }
+
+  function overview() {
+    const sources = Object.entries(data.summary).filter(([source]) => !$('source').value || source === $('source').value);
+    const sum = key => sources.reduce((total, [, metrics]) => total + metrics[key], 0);
+    const total = sum('input_reports'), changed = sum('edited_reports'), classified = sum('classified_reports');
+    const stats = [['Saved pairs', total], ['Unchanged', sum('included_reports') - changed], ['Classified', classified], ['Skipped', sum('skipped_reports')], ['Excluded', sum('excluded_reports')]];
+    $('stats').innerHTML = stats.map(([label, count]) => `<div class="stat"><small>${label}</small><strong>${number(count)}</strong><small>${percent(count, total)} of saved pairs</small></div>`).join('');
+    $('rates').innerHTML = ['preferential', 'factual', 'uncertain'].map(category => {
+      const count = sources.reduce((total, [, metrics]) => total + metrics.category_counts[category], 0);
+      return `<div><div class="between">${badge(category)}<strong>${percent(count, classified)}</strong></div><small>${number(count)} / ${number(classified)} classified</small><div class="track"><span style="width:${classified ? 100 * count / classified : 0}%"></span></div></div>`;
+    }).join('');
+    $('coverage').textContent = `Classification coverage: ${number(classified)} / ${number(changed)} changed pairs (${percent(classified, changed)}). Skipped: ${number(sum('skipped_reports'))} / ${number(changed)} changed pairs (${percent(sum('skipped_reports'), changed)}).`;
+  }
+
+  function filter() {
+    query = phrasePattern($('query').value);
+    matches = data.pairs.filter(record => ['source', 'status', 'category', 'change'].every(key => !$(key).value || record[key] === $(key).value)
+      && (!query || [...(record.software_report || []), ...(record.physician_report || [])].some(item => query.test(item))));
+    page = 0;
+    selected = matches[0] || null;
+    renderList();
+    renderDetail();
+    overview();
+  }
+
+  function renderList() {
+    $('matches').textContent = `${number(matches.length)} pairs`;
+    $('list').innerHTML = matches.slice(page * pageSize, (page + 1) * pageSize).map((record, index) => `<button class="record" data-index="${page * pageSize + index}" aria-current="${record === selected}"><div class="between"><strong>Pair ${number(record.pair_index)}</strong>${badge(record.category || record.status)}</div><small>${escape(name('source', record.source))} · ${escape(record.file.split(/[\\/]/).pop())}</small><small>${escape(name('change', record.change) || 'Excluded from comparison')}</small></button>`).join('') || '<p class="empty">No matching pairs.</p>';
+    $('page').textContent = matches.length ? `${page + 1} / ${Math.ceil(matches.length / pageSize)}` : '0 / 0';
+    $('previous').disabled = page === 0;
+    $('next').disabled = (page + 1) * pageSize >= matches.length;
+  }
+
+  function report(label, items, changes, kind) {
+    const content = items === null ? '<p class="muted">Report text was not saved for this pair.</p>' : !items.length ? '<p class="muted">Empty report.</p>'
+      : `<ul>${items.map(item => `<li class="${(changes || []).includes(item) ? kind : ''}">${highlight(item)}</li>`).join('')}</ul>`;
+    return `<section class="report"><h3>${label}</h3><small>${kind === 'deleted' ? 'Orange: deleted by physician' : 'Green: added by physician'}</small>${content}</section>`;
+  }
+
+  function attemptView(attempt) {
+    const response = attempt.response;
+    const message = response?.choices?.[0]?.message || {};
+    const reasoning = message.reasoning || message.reasoning_details;
+    return `<details><summary>Attempt ${attempt.number} · ${attempt.error ? 'Failed' : 'Accepted'}</summary>
+      ${attempt.error ? `<p class="error prose">${escape(attempt.error)}</p>` : ''}
+      <h3>Response</h3><pre>${message.content == null ? 'No response content saved.' : typeof message.content === 'string' ? escape(message.content) : json(message.content)}</pre>
+      <h3>Reasoning supplied by provider</h3><pre>${reasoning && (!Array.isArray(reasoning) || reasoning.length) ? typeof reasoning === 'string' ? escape(reasoning) : json(reasoning) : 'Not supplied.'}</pre>
+      ${response?.usage ? `<h3>Usage</h3><pre>${json(response.usage)}</pre>` : ''}
+      <details><summary>Full API response</summary><pre>${json(response)}</pre></details></details>`;
+  }
+
+  function renderDetail() {
+    const record = selected;
+    if (!record) { $('detail').innerHTML = '<div class="empty">No pairs to display. Change or reset the filters.</div>'; return; }
+    const noExplanation = {unchanged: 'Literal reports are unchanged; no LLM call was needed.', excluded: 'Excluded before classification; see input status.', skipped: 'No valid classification after the saved attempts; see errors below.'};
+    $('detail').innerHTML = `<div class="between"><h2>Pair ${number(record.pair_index)} · ${escape(name('source', record.source))}</h2>${badge(record.category || record.status)}</div>
+      <p class="muted identity">${escape(record.file)}<br>File pair index: ${record.pair_index} (zero-based) · Status: ${escape(record.status)} · Input: ${escape(name('input', record.input_status))}<br>Literal change: ${escape(name('change', record.change) || 'Not compared')}</p>
+      <div class="reports">${report('Software report', record.software_report, record.deleted, 'deleted')}${report('Physician report', record.physician_report, record.added, 'added')}</div>
+      <section class="explanation"><h3>Model explanation</h3><div class="prose">${escape(record.explanation || noExplanation[record.status] || 'No explanation saved.')}</div></section>
+      <h3>API attempts (${record.attempts.length})</h3>${record.attempts.map(attemptView).join('') || '<p class="muted">No API calls.</p>'}
+      <details><summary>Full saved pair</summary><pre>${json(record)}</pre></details>`;
+  }
+
+  for (const [id, keys] of Object.entries({source: Object.keys(data.summary), status: ['excluded', 'unchanged', 'classified', 'skipped'], category: ['preferential', 'factual', 'uncertain'], change: Object.keys(data.names.change)})) {
+    for (const key of keys) $(id).add(new Option(id === 'source' || id === 'change' ? name(id, key) : title(key), key));
+    $(id).addEventListener('change', filter);
+  }
+  $('query').addEventListener('input', filter);
+  $('reset').addEventListener('click', () => { for (const key of ['query', 'source', 'status', 'category', 'change']) $(key).value = ''; filter(); });
+  $('list').addEventListener('click', event => { const button = event.target.closest('button[data-index]'); if (button) { selected = matches[Number(button.dataset.index)]; renderList(); renderDetail(); } });
+  for (const [id, step] of [['previous', -1], ['next', 1]]) $(id).addEventListener('click', () => { page += step; selected = matches[page * pageSize]; renderList(); renderDetail(); $('list').scrollTop = 0; });
+  $('model').textContent = data.run.llm.model;
+  $('snapshot').textContent = `${data.run.completed ? 'Run complete' : 'Run unfinished'} · Exported ${new Date(data.exported_at).toLocaleString()}`;
+  if (data.incomplete_tail) $('snapshot').append(' · Unfinished final record omitted.');
+  $('run').textContent = JSON.stringify(data.run, null, 2);
+  $('figures').innerHTML = Object.entries(data.figures).flatMap(([source, paths]) => paths.map(path => `<a href="${escape(path)}" target="_blank" rel="noopener"><img loading="lazy" src="${escape(path)}" alt="${escape(name('source', source))}: ${escape(path.split('/').pop().replaceAll('_', ' '))}"></a>`)).join('');
+  filter();
+</script>
+</body>
+</html>

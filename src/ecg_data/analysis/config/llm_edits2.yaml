@@ -4,9 +4,14 @@ defaults:
 experiment: llm_edits
 development: false # Print and pause after each pair; false enables concurrent batches.
 reports_per_batch: 8 # One pair per request; at most this many concurrent requests.
+# resume_from: /Users/william/ECG-Data/src/ecg_data/analysis/software_v_human/results/llm_edits/agh/20261012T184644719774Z # null starts a new run.
+resume_from: null # Existing run directory; null starts a new run.
 
 study_options:
   empty_reports: exclude
+
+plots:
+  run_id: 20261012T211113590039Z
 
 llm:
   model: nvidia/nemotron-3-ultra-550b-a55b:free # Set your OpenRouter model ID (provider/model).

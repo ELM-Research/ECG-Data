@@ -8,6 +8,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import partial
+from http.client import IncompleteRead
 from itertools import islice
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -89,7 +90,7 @@ def _classify(software, physician, *, prompt, request, max_attempts):
                 raise ValueError("OpenRouter response has no assistant content.") from error
             result = _parse_output(output)
             return result, attempts
-        except (URLError, TimeoutError) as error:
+        except (URLError, TimeoutError, IncompleteRead) as error:
             attempt["error"] = str(error)
             if number < max_attempts:
                 time.sleep(2 ** (number - 1))
@@ -186,6 +187,27 @@ def _save(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
 
 
+def _pair_id(record):
+    return record["source"], record["file"], record["pair_index"]
+
+
+def _load_saved(path, counts):
+    saved = set()
+    with path.open("r+b") as file:
+        while line := file.readline():
+            if not line.endswith(b"\n"):
+                # A write interrupted before its newline is not a saved record.
+                file.truncate(file.tell() - len(line))
+                break
+            record = json.loads(line)
+            identity = _pair_id(record)
+            if identity in saved:
+                raise ValueError(f"Duplicate saved pair: {identity}")
+            saved.add(identity)
+            _count(counts, record)
+    return saved
+
+
 def run_analysis(cfg):
     options = cfg.get("study_options", {})
     empty_reports = options.get("empty_reports", "exclude")
@@ -208,13 +230,11 @@ def run_analysis(cfg):
         raise ValueError("reports_per_batch must be a positive integer.")
     prompt = PROMPT_PATH.read_text()
     pairs = _pairs(report_files(cfg["data_path"], cfg["data_name"]), cfg["data_name"])
-    batch = tuple(islice(pairs, batch_size))
-    if not batch:
-        raise ValueError(f"No {cfg['data_name']} report pairs in {cfg['data_path']}")
 
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    output = Path(cfg["save_path"]) / "llm_edits" / cfg["data_name"] / run_id
-    output.mkdir(parents=True)
+    resume_from = cfg.get("resume_from")
+    output = (Path(resume_from) if resume_from else
+              Path(cfg["save_path"]) / "llm_edits" / cfg["data_name"] / run_id)
     metadata = {
         "run_id": run_id, "completed": False, "endpoint": ENDPOINT, "llm": settings,
         "data_name": cfg["data_name"], "data_path": str(Path(cfg["data_path"]).resolve()),
@@ -223,17 +243,33 @@ def run_analysis(cfg):
         "llm_input_normalization": INPUT_NORMALIZATION,
         "undefined_ratio": cfg["undefined_ratio"], "prompt": prompt,
     }
+    counts = {}
+    saved = set()
+    if resume_from:
+        previous = json.loads((output / "run.json").read_text())
+        for key in ("endpoint", "llm", "data_name", "data_path", "normalization",
+                    "empty_reports", "llm_input_normalization", "prompt"):
+            if previous[key] != metadata[key]:
+                raise ValueError(f"Cannot resume: {key} differs from the saved run.")
+        metadata["run_id"] = previous["run_id"]
+        saved = _load_saved(output / "pairs.jsonl", counts)
+        pairs = (item for item in pairs if _pair_id(item[0]) not in saved)
+        print(f"Resuming {output}: {len(saved)} saved pairs")
+    batch = tuple(islice(pairs, batch_size))
+    if not batch and not saved:
+        raise ValueError(f"No {cfg['data_name']} report pairs in {cfg['data_path']}")
+    output.mkdir(parents=True, exist_ok=bool(resume_from))
     _save(output / "run.json", metadata)
+    results = summarize(counts, empty_reports=empty_reports, undefined_ratio=cfg["undefined_ratio"])
+    _save(output / "summary.json", results)
     print(f"Saving {output}")
     request = partial(_request, api_key=api_key, **{key: settings[key] for key in (
         "model", "temperature", "max_tokens", "timeout",
     )})
     classify = partial(_classify, prompt=prompt, request=request, max_attempts=settings["max_attempts"])
     worker = partial(_analyze_pair, empty_reports=empty_reports, classify=classify)
-    counts = {}
-    results = {}
-    with (output / "pairs.jsonl").open("w") as file, ThreadPoolExecutor(max_workers=batch_size) as pool:
-        with tqdm(desc="llm_edits", unit="pair") as progress:
+    with (output / "pairs.jsonl").open("a") as file, ThreadPoolExecutor(max_workers=batch_size) as pool:
+        with tqdm(desc="llm_edits", unit="pair", initial=len(saved)) as progress:
             while batch:
                 for record in pool.map(worker, batch):
                     file.write(json.dumps(record, allow_nan=False) + "\n")

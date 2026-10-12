@@ -142,20 +142,8 @@ def _plot_rates(results, rows, values, *, title, numerator, denominator, output,
     plt.close(fig)
 
 
-def plot_results(results, output, *, top_terms):
-    """Plot top-K statements and terms.py matches, together and by category."""
-    if not results or any(metrics.get("study") != "edits" for metrics in results.values()):
-        raise ValueError("Expected saved results from experiment: edits.")
-    if any(metrics.get("normalization", {}).get("blanks") != "drop" for metrics in results.values()):
-        raise ValueError("Rerun the edits analysis first: these results predate blank-statement removal.")
-    if not isinstance(top_terms, int) or top_terms < 1:
-        raise ValueError("plots.top_terms must be a positive integer.")
-    policies = {metrics["empty_reports"] for metrics in results.values()}
-    if len(policies) != 1:
-        raise ValueError("Compared sources must use the same empty-report policy.")
-    order = {source: index for index, source in enumerate(SOURCE_NAMES)}
-    results = {source: results[source] for source in sorted(results, key=lambda source: (order.get(source, len(order)), source))}
-    output = Path(output)
+def _plot_reports(results, output):
+    """Report-level plots shared by the rules and LLM studies."""
     _plot_rates(
         results, [("edited", "Any physician edit")],
         lambda metrics, _: (metrics["edited_reports"], metrics["included_reports"]),
@@ -178,6 +166,23 @@ def plot_results(results, output, *, top_terms):
         denominator="All input report pairs read by this analysis, before exclusions.",
         output=output / "03_input_quality.png",
     )
+
+
+def plot_results(results, output, *, top_terms):
+    """Plot top-K statements and terms.py matches, together and by category."""
+    if not results or any(metrics.get("study") != "edits" for metrics in results.values()):
+        raise ValueError("Expected saved results from experiment: edits.")
+    if any(metrics.get("normalization", {}).get("blanks") != "drop" for metrics in results.values()):
+        raise ValueError("Rerun the edits analysis first: these results predate blank-statement removal.")
+    if not isinstance(top_terms, int) or top_terms < 1:
+        raise ValueError("plots.top_terms must be a positive integer.")
+    policies = {metrics["empty_reports"] for metrics in results.values()}
+    if len(policies) != 1:
+        raise ValueError("Compared sources must use the same empty-report policy.")
+    order = {source: index for index, source in enumerate(SOURCE_NAMES)}
+    results = {source: results[source] for source in sorted(results, key=lambda source: (order.get(source, len(order)), source))}
+    output = Path(output)
+    _plot_reports(results, output)
     vocabulary = set().union(*(metrics["terms"] for metrics in results.values()))
     edits = {
         term: sum(metrics["terms"][term]["edited_report_count"] for metrics in results.values())
