@@ -4,6 +4,8 @@ defaults:
 experiment: edits
 study_options:
   empty_reports: exclude # Log empty pairs separately; they may indicate preprocessing errors.
+  truncate: [] # Case-insensitive phrases; remove the first matching item and all following items.
+  # truncate: ["when compared to", "no previous ecgs available"]
 
 plots:
   top_terms: 60 # Top-K plots; a second set includes all exact matches from terms.py.
