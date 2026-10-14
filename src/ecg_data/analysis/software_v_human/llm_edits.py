@@ -111,17 +111,18 @@ def _pairs(paths, data_name):
             yield {"source": source, "file": str(path.resolve()), "pair_index": index}, software, physician
 
 
-def _analyze_pair(item, *, empty_reports, classify, truncate=()):
+def _analyze_pair(item, *, empty_reports, classify, truncate=(), remove=()):
     identity, software, physician = item
-    comparison = edits.compare_reports(software, physician, empty_reports=empty_reports, truncate=truncate)
+    comparison = edits.compare_reports(software, physician, empty_reports=empty_reports,
+                                       truncate=truncate, remove=remove)
     record = {
         **identity, **comparison, "software_report": None, "physician_report": None,
         "status": "excluded", "category": None, "explanation": None, "attempts": [],
     }
     if comparison["change"] is None:
         return record
-    record["software_report"] = list(normalize_report(software, **INPUT_NORMALIZATION, truncate=truncate))
-    record["physician_report"] = list(normalize_report(physician, **INPUT_NORMALIZATION, truncate=truncate))
+    record["software_report"] = list(normalize_report(software, **INPUT_NORMALIZATION, truncate=truncate, remove=remove))
+    record["physician_report"] = list(normalize_report(physician, **INPUT_NORMALIZATION, truncate=truncate, remove=remove))
     if comparison["change"] == "unchanged":
         record["status"] = "unchanged"
         return record
@@ -147,7 +148,7 @@ def _count(counts, record):
         current["attempts"][len(record["attempts"])] += 1
 
 
-def summarize(counts, *, empty_reports, undefined_ratio, truncate=()):
+def summarize(counts, *, empty_reports, undefined_ratio, truncate=(), remove=()):
     """Category rates use classified changed pairs; failed calls never become labels."""
     def ratio(numerator, denominator):
         return numerator / denominator if denominator else undefined_ratio
@@ -164,6 +165,7 @@ def summarize(counts, *, empty_reports, undefined_ratio, truncate=()):
             "llm_input_normalization": INPUT_NORMALIZATION,
             "empty_reports": empty_reports, "input_reports": total,
             "truncate": list(truncate),
+            "remove": list(remove),
             "included_reports": included, "excluded_reports": statuses["excluded"],
             "input_status_counts": {key: current["inputs"][key] for key in edits.INPUTS},
             "status_counts": {key: statuses[key] for key in STATUSES},
@@ -219,7 +221,8 @@ def run_analysis(cfg):
     options = cfg.get("study_options", {})
     empty_reports = options.get("empty_reports", "exclude")
     truncate = options.get("truncate", [])
-    edits.compare_reports([], [], empty_reports=empty_reports, truncate=truncate)
+    remove = options.get("remove", [])
+    edits.compare_reports([], [], empty_reports=empty_reports, truncate=truncate, remove=remove)
     settings = {"temperature": 0, "max_tokens": 1024, "timeout": 120, "max_attempts": 3,
                 **cfg.get("llm", {})}
     model = settings.get("model")
@@ -248,7 +251,7 @@ def run_analysis(cfg):
         "data_name": cfg["data_name"], "data_path": str(Path(cfg["data_path"]).resolve()),
         "development": cfg["development"], "reports_per_batch": batch_size,
         "normalization": edits.NORMALIZATION, "empty_reports": empty_reports,
-        "truncate": truncate,
+        "truncate": truncate, "remove": remove,
         "llm_input_normalization": INPUT_NORMALIZATION,
         "undefined_ratio": cfg["undefined_ratio"], "prompt": prompt,
     }
@@ -256,8 +259,9 @@ def run_analysis(cfg):
     saved = set()
     if resume_from:
         previous = json.loads((output / "run.json").read_text())
-        if previous.get("truncate", []) != truncate:
-            raise ValueError("Cannot resume: truncate differs from the saved run.")
+        for key in ("truncate", "remove"):
+            if previous.get(key, []) != metadata[key]:
+                raise ValueError(f"Cannot resume: {key} differs from the saved run.")
         for key in ("endpoint", "llm", "data_name", "data_path", "normalization",
                     "empty_reports", "llm_input_normalization", "prompt"):
             if previous[key] != metadata[key]:
@@ -272,14 +276,14 @@ def run_analysis(cfg):
     output.mkdir(parents=True, exist_ok=bool(resume_from))
     _save(output / "run.json", metadata)
     results = summarize(counts, empty_reports=empty_reports, undefined_ratio=cfg["undefined_ratio"],
-                        truncate=truncate)
+                        truncate=truncate, remove=remove)
     _save(output / "summary.json", results)
     print(f"Saving {output}")
     request = partial(_request, api_key=api_key, **{key: settings[key] for key in (
         "model", "temperature", "max_tokens", "timeout",
     )})
     classify = partial(_classify, prompt=prompt, request=request, max_attempts=settings["max_attempts"])
-    worker = partial(_analyze_pair, empty_reports=empty_reports, classify=classify, truncate=truncate)
+    worker = partial(_analyze_pair, empty_reports=empty_reports, classify=classify, truncate=truncate, remove=remove)
     with (output / "pairs.jsonl").open("a") as file, ThreadPoolExecutor(max_workers=batch_size) as pool:
         with tqdm(desc="llm_edits", unit="pair", initial=len(saved)) as progress:
             while batch:
@@ -291,7 +295,7 @@ def run_analysis(cfg):
                     if cfg["development"]:
                         print(json.dumps(record, indent=2, allow_nan=False))
                 results = summarize(counts, empty_reports=empty_reports, undefined_ratio=cfg["undefined_ratio"],
-                                    truncate=truncate)
+                                    truncate=truncate, remove=remove)
                 _save(output / "summary.json", results)
                 if cfg["development"] and input("Enter for next pair; q to stop: ").strip().lower() == "q":
                     break

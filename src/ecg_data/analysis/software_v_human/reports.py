@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 
 
-def normalize_report(report, *, case, duplicates, order, blanks="preserve", truncate=()):
+def normalize_report(report, *, case, duplicates, order, blanks="preserve", truncate=(), remove=()):
     """Normalize statements without rewriting nonblank whitespace or punctuation."""
     if not isinstance(report, list) or any(not isinstance(s, str) for s in report):
         raise TypeError("Each report must be a list of strings.")
@@ -16,16 +16,20 @@ def normalize_report(report, *, case, duplicates, order, blanks="preserve", trun
         raise ValueError("order must be 'ignore' or 'preserve'.")
     if blanks not in ("preserve", "drop"):
         raise ValueError("blanks must be 'preserve' or 'drop'.")
-    if not isinstance(truncate, (list, tuple)) or any(
-        not isinstance(term, str) or not term.strip() for term in truncate
-    ):
-        raise ValueError("truncate must be a list of nonblank phrases.")
+    for name, phrases in (("truncate", truncate), ("remove", remove)):
+        if not isinstance(phrases, (list, tuple)) or any(
+            not isinstance(term, str) or not term.strip() for term in phrases
+        ):
+            raise ValueError(f"{name} must be a list of nonblank phrases.")
 
     markers = [term.lower() for term in truncate]
     for index, statement in enumerate(report):
         if any(marker in statement.lower() for marker in markers):
             report = report[:index]
             break
+
+    removals = [term.lower() for term in remove]
+    report = [s for s in report if not any(term in s.lower() for term in removals)]
 
     statements = [s.lower() for s in report] if case == "lower" else list(report)
     if blanks == "drop":

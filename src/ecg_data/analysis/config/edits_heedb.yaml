@@ -4,6 +4,7 @@ defaults:
 experiment: edits
 study_options:
   empty_reports: exclude # Log empty pairs separately; they may indicate preprocessing errors.
+  remove: [] # Case-insensitive phrases; remove only matching statements.
   truncate: ["when compared to the prior tracing of,", "when compared with ecg of", "no previous ecgs available", "no prior tracing for comparison"]
   # truncate: ["when compared to", "no previous ecgs available"]
 

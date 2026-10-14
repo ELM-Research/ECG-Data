@@ -20,7 +20,7 @@ def classify_change(added, deleted):
     return "unchanged"
 
 
-def compare_reports(software, physician, *, empty_reports, truncate=()):
+def compare_reports(software, physician, *, empty_reports, truncate=(), remove=()):
     """Return literal changes; missing or excluded inputs have no change label."""
     if empty_reports not in ("exclude", "compare"):
         raise ValueError("Choose empty_reports: 'exclude' or 'compare'.")
@@ -30,8 +30,8 @@ def compare_reports(software, physician, *, empty_reports, truncate=()):
         return result
 
     try:
-        original = set(normalize_report(software, **NORMALIZATION, truncate=truncate))
-        final = set(normalize_report(physician, **NORMALIZATION, truncate=truncate))
+        original = set(normalize_report(software, **NORMALIZATION, truncate=truncate, remove=remove))
+        final = set(normalize_report(physician, **NORMALIZATION, truncate=truncate, remove=remove))
     except TypeError:
         result["input_status"] = "invalid"
         return result
@@ -60,11 +60,11 @@ def empty_counts():
     return {key: Counter() for key in ("inputs", "changes", *STATEMENTS)}
 
 
-def count_reports(reports, *, empty_reports, truncate=()):
+def count_reports(reports, *, empty_reports, truncate=(), remove=()):
     """Count each statement once per pair, including unchanged reports."""
     results = {}
     for source, software, physician in reports:
-        pair = compare_reports(software, physician, empty_reports=empty_reports, truncate=truncate)
+        pair = compare_reports(software, physician, empty_reports=empty_reports, truncate=truncate, remove=remove)
         if source not in results:
             results[source] = empty_counts()
         counts = results[source]
@@ -85,7 +85,7 @@ def merge_counts(total, partial):
             total[source][name].update(values)
 
 
-def summarize(totals, *, empty_reports, undefined_ratio, truncate=()):
+def summarize(totals, *, empty_reports, undefined_ratio, truncate=(), remove=()):
     """Report every numerator and denominator; ratios are fractions, not percentages."""
     if empty_reports not in ("exclude", "compare"):
         raise ValueError("Choose empty_reports: 'exclude' or 'compare'.")
@@ -124,6 +124,7 @@ def summarize(totals, *, empty_reports, undefined_ratio, truncate=()):
             "normalization": NORMALIZATION,
             "empty_reports": empty_reports,
             "truncate": list(truncate),
+            "remove": list(remove),
             "input_reports": total,
             "included_reports": included,
             "excluded_reports": total - included,

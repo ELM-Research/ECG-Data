@@ -8,11 +8,11 @@ resume_from: null # Existing run directory; null starts a new run.
 
 study_options:
   empty_reports: exclude
-  truncate: [] # Case-insensitive phrases; remove the first matching item and all following items.
-  # truncate: ["when compared to", "no previous ecgs available"]
+  remove: ["machine results only - see ed notes for md interpretation."] # Case-insensitive phrases; remove only matching statements.
+  truncate: ["when compared to the prior tracing of,", "when compared with ecg of", "no previous ecgs available", "no prior tracing for comparison"]
 
 plots:
-  run_id: 20261012T211108876751Z
+  run_id: 20261014T005053969109Z
 
 llm:
   # model: nvidia/nemotron-3-ultra-550b-a55b:free # Set your OpenRouter model ID (provider/model).
