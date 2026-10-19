@@ -1,4 +1,4 @@
-"""Classify report edits with OpenRouter and save each result for later analysis."""
+"""Classify report edits with OpenRouter or Hugging Face and save each result."""
 
 import json
 import os
@@ -78,35 +78,85 @@ def _messages(software, physician, prompt):
     return [{"role": "user", "content": content}]
 
 
-def _classify(software, physician, *, prompt, request, max_attempts):
-    messages = _messages(software, physician, prompt)
-    attempts = []
+def _load_hf(model, device_map="auto"):
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(model, padding_side="left")
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained(model, device_map=device_map, dtype="auto")
+    model.eval()
+
+    def request(messages):
+        inputs = tokenizer.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, padding=True,
+            return_tensors="pt", return_dict=True,
+        ).to(model.device)
+        with torch.inference_mode():
+            outputs = model.generate(**inputs, pad_token_id=tokenizer.pad_token_id)
+        if hasattr(outputs, "sequences"):
+            outputs = outputs.sequences
+        contents = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        if len(contents) != len(messages):
+            raise RuntimeError("The HF model must return one sequence per report pair.")
+        return [{"choices": [{"message": {"role": "assistant", "content": content}}]} for content in contents]
+
+    return request
+
+
+def _classify_batch(reports, *, prompt, request, max_attempts):
+    messages = [_messages(software, physician, prompt) for software, physician in reports]
+    results = [(None, []) for _ in reports]
+    pending = list(range(len(reports)))
     for number in range(1, max_attempts + 1):
-        output = None
-        attempt = {"number": number, "response": None, "error": None}
-        attempts.append(attempt)
-        try:
-            response = request(messages)
-            attempt["response"] = response
+        if not pending:
+            break
+        responses = request([messages[index] for index in pending])
+        retry = []
+        wait = False
+        for index, response in zip(pending, responses, strict=True):
+            output = None
+            attempts = results[index][1]
+            attempt = {"number": number, "response": None, "error": None}
+            attempts.append(attempt)
             try:
-                output = response["choices"][0]["message"]["content"]
-            except (KeyError, IndexError, TypeError) as error:
-                raise ValueError("OpenRouter response has no assistant content.") from error
-            result = _parse_output(output)
-            return result, attempts
-        except (URLError, TimeoutError, IncompleteRead) as error:
-            attempt["error"] = str(error)
-            if number < max_attempts:
-                time.sleep(2 ** (number - 1))
-        except ValueError as error:
-            attempt["error"] = str(error)
-            if isinstance(output, str):
-                messages.append({"role": "assistant", "content": output})
-            messages.append({"role": "user", "content": (
-                f"Your previous output was incorrect: {error} "
-                "Return only the required JSON object, with no extra keys or Markdown."
-            )})
-    return None, attempts
+                if isinstance(response, Exception):
+                    raise response
+                attempt["response"] = response
+                try:
+                    output = response["choices"][0]["message"]["content"]
+                except (KeyError, IndexError, TypeError) as error:
+                    raise ValueError("Response has no assistant content.") from error
+                results[index] = _parse_output(output), attempts
+                continue
+            except (URLError, TimeoutError, IncompleteRead) as error:
+                attempt["error"] = str(error)
+                wait = True
+            except ValueError as error:
+                attempt["error"] = str(error)
+                if isinstance(output, str):
+                    messages[index].append({"role": "assistant", "content": output})
+                messages[index].append({"role": "user", "content": (
+                    f"Your previous output was incorrect: {error} "
+                    "Return only the required JSON object, with no extra keys or Markdown."
+                )})
+            retry.append(index)
+        pending = retry
+        if wait and number < max_attempts:
+            time.sleep(2 ** (number - 1))
+    return results
+
+
+def _classify(software, physician, *, prompt, request, max_attempts):
+    def request_batch(messages):
+        try:
+            return [request(messages[0])]
+        except (URLError, TimeoutError, IncompleteRead, ValueError) as error:
+            return [error]
+
+    return _classify_batch([(software, physician)], prompt=prompt,
+                           request=request_batch, max_attempts=max_attempts)[0]
 
 
 def _pairs(paths, data_name):
@@ -115,7 +165,7 @@ def _pairs(paths, data_name):
             yield {"source": source, "file": str(path.resolve()), "pair_index": index}, software, physician
 
 
-def _analyze_pair(item, *, empty_reports, classify, truncate=(), remove=()):
+def _analyze_pair(item, *, empty_reports, classify=None, truncate=(), remove=()):
     identity, software, physician = item
     comparison = edits.compare_reports(software, physician, empty_reports=empty_reports,
                                        truncate=truncate, remove=remove)
@@ -130,11 +180,26 @@ def _analyze_pair(item, *, empty_reports, classify, truncate=(), remove=()):
     if comparison["change"] == "unchanged":
         record["status"] = "unchanged"
         return record
+    record["status"] = "skipped"
+    if classify is None:
+        return record
     result, attempts = classify(record["software_report"], record["physician_report"])
     record.update(status="classified" if result else "skipped", attempts=attempts)
     if result:
         record.update(result)
     return record
+
+
+def _analyze_batch(items, *, empty_reports, classify, truncate=(), remove=()):
+    records = [_analyze_pair(item, empty_reports=empty_reports, truncate=truncate, remove=remove) for item in items]
+    changed = [record for record in records if record["status"] == "skipped"]
+    if changed:
+        results = classify([(record["software_report"], record["physician_report"]) for record in changed])
+        for record, (result, attempts) in zip(changed, results, strict=True):
+            record.update(status="classified" if result else "skipped", attempts=attempts)
+            if result:
+                record.update(result)
+    return records
 
 
 def _count(counts, record):
@@ -227,18 +292,26 @@ def run_analysis(cfg):
     truncate = options.get("truncate", [])
     remove = options.get("remove", [])
     edits.compare_reports([], [], empty_reports=empty_reports, truncate=truncate, remove=remove)
-    settings = {"temperature": 0, "max_tokens": 1024, "timeout": 120, "max_attempts": 3,
-                **cfg.get("llm", {})}
+    settings = cfg.get("llm", {})
+    backend = settings.get("backend", "openrouter")
+    if backend not in ("openrouter", "huggingface"):
+        raise ValueError("llm.backend must be 'openrouter' or 'huggingface'.")
+    defaults = ({"temperature": 0, "max_tokens": 1024, "timeout": 120} if backend == "openrouter"
+                else {"device_map": "auto"})
+    settings = {**defaults, "backend": backend, "max_attempts": 3, **settings}
+    if backend == "huggingface":
+        for key in ("temperature", "max_tokens", "timeout"):
+            settings.pop(key, None)
     model = settings.get("model")
     if not isinstance(model, str) or not model.strip():
-        raise ValueError("Set llm.model to an OpenRouter model ID.")
-    for key in ("max_attempts", "max_tokens"):
+        raise ValueError("Set llm.model to a model ID or local HF model directory.")
+    for key in (("max_attempts", "max_tokens") if backend == "openrouter" else ("max_attempts",)):
         if type(settings[key]) is not int or settings[key] < 1:
             raise ValueError(f"llm.{key} must be a positive integer.")
-    if settings["timeout"] <= 0:
+    if backend == "openrouter" and settings["timeout"] <= 0:
         raise ValueError("llm.timeout must be positive.")
     api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
+    if backend == "openrouter" and not api_key:
         raise ValueError("Set OPENROUTER_API_KEY in your environment.")
     batch_size = 1 if cfg["development"] else cfg.get("reports_per_batch", 8)
     if type(batch_size) is not int or batch_size < 1:
@@ -251,7 +324,8 @@ def run_analysis(cfg):
     output = (Path(resume_from) if resume_from else
               Path(cfg["save_path"]) / "llm_edits" / cfg["data_name"] / run_id)
     metadata = {
-        "run_id": run_id, "completed": False, "endpoint": ENDPOINT, "llm": settings,
+        "run_id": run_id, "completed": False,
+        "endpoint": ENDPOINT if backend == "openrouter" else None, "llm": settings,
         "data_name": cfg["data_name"], "data_path": str(Path(cfg["data_path"]).resolve()),
         "development": cfg["development"], "reports_per_batch": batch_size,
         "normalization": edits.NORMALIZATION, "empty_reports": empty_reports,
@@ -263,6 +337,7 @@ def run_analysis(cfg):
     saved = set()
     if resume_from:
         previous = json.loads((output / "run.json").read_text())
+        previous["llm"].setdefault("backend", "openrouter")
         for key in ("truncate", "remove"):
             if previous.get(key, []) != metadata[key]:
                 raise ValueError(f"Cannot resume: {key} differs from the saved run.")
@@ -283,15 +358,21 @@ def run_analysis(cfg):
                         truncate=truncate, remove=remove)
     _save(output / "summary.json", results)
     print(f"Saving {output}")
-    request = partial(_request, api_key=api_key, **{key: settings[key] for key in (
-        "model", "temperature", "max_tokens", "timeout",
-    )})
-    classify = partial(_classify, prompt=prompt, request=request, max_attempts=settings["max_attempts"])
-    worker = partial(_analyze_pair, empty_reports=empty_reports, classify=classify, truncate=truncate, remove=remove)
+    if backend == "huggingface":
+        request = _load_hf(model, device_map=settings["device_map"])
+        classify = partial(_classify_batch, prompt=prompt, request=request, max_attempts=settings["max_attempts"])
+        worker = partial(_analyze_batch, empty_reports=empty_reports, classify=classify, truncate=truncate, remove=remove)
+    else:
+        request = partial(_request, api_key=api_key, **{key: settings[key] for key in (
+            "model", "temperature", "max_tokens", "timeout",
+        )})
+        classify = partial(_classify, prompt=prompt, request=request, max_attempts=settings["max_attempts"])
+        worker = partial(_analyze_pair, empty_reports=empty_reports, classify=classify, truncate=truncate, remove=remove)
     with (output / "pairs.jsonl").open("a") as file, ThreadPoolExecutor(max_workers=batch_size) as pool:
         with tqdm(desc="llm_edits", unit="pair", initial=len(saved)) as progress:
             while batch:
-                for record in pool.map(worker, batch):
+                records = worker(batch) if backend == "huggingface" else pool.map(worker, batch)
+                for record in records:
                     file.write(json.dumps(record, allow_nan=False) + "\n")
                     file.flush()
                     _count(counts, record)
