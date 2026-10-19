@@ -98,8 +98,7 @@ def _load_hf(model, device_map="auto"):
     def request(messages):
         inputs = tokenizer.apply_chat_template(
             messages, tokenize=True, add_generation_prompt=True, padding=True,
-            return_tensors="pt", return_dict=True,
-        ).to(model.device)
+            return_tensors="pt", return_dict=True).to(model.device)
         with torch.inference_mode():
             outputs = model.generate(**inputs, pad_token_id=tokenizer.pad_token_id, max_new_tokens=512)
         if hasattr(outputs, "sequences"):

@@ -2,7 +2,7 @@ defaults:
   - ./software_v_human_agh.yaml
 
 experiment: llm_edits
-development: true # Print and pause after each pair; false enables batches.
+development: false # Print and pause after each pair; false enables batches.
 reports_per_batch: 8 # Concurrent OpenRouter requests or one HF generation batch.
 resume_from: null # Existing run directory; null starts a new run.
 
