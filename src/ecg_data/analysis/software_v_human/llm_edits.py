@@ -1,4 +1,4 @@
-"""Classify report edits with OpenRouter or Hugging Face and save each result."""
+"""Classify report edits with OpenRouter, Hugging Face, or SGLang and save each result."""
 
 import json
 import os
@@ -52,27 +52,28 @@ def _parse_output(content):
     return result
 
 
-def _request(messages, *, api_key, model, temperature, max_tokens, timeout):
+def _request(messages, *, endpoint, api_key, model, temperature, max_tokens, timeout):
     payload = {
         "model": model, "messages": messages, "temperature": temperature,
         "max_tokens": max_tokens, "response_format": {"type": "json_object"},
     }
-    request = Request(ENDPOINT, data=json.dumps(payload).encode(), headers={
-        "Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
-    })
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    request = Request(endpoint, data=json.dumps(payload).encode(), headers=headers)
     try:
         with urlopen(request, timeout=timeout) as response:
             result = json.load(response)
     except HTTPError as error:
         if error.code in (400, 401, 402, 403, 404, 422):
-            raise RuntimeError(f"OpenRouter HTTP {error.code}; check key, credit, and model settings.") from error
+            raise RuntimeError(f"LLM HTTP {error.code}; check endpoint, key, and model settings.") from error
         raise
     if not isinstance(result, dict):
-        raise ValueError("OpenRouter returned an invalid response envelope.")
+        raise ValueError("LLM returned an invalid response envelope.")
     if result.get("error"):
         error = result["error"]
         if str(error.get("code")) in ("400", "401", "402", "403", "404", "422"):
-            raise RuntimeError(f"OpenRouter error: {error}")
+            raise RuntimeError(f"LLM error: {error}")
         raise URLError(str(error))
     return result
 
@@ -300,9 +301,9 @@ def run_analysis(cfg):
     edits.compare_reports([], [], empty_reports=empty_reports, truncate=truncate, remove=remove)
     settings = cfg.get("llm", {})
     backend = settings.get("backend", "openrouter")
-    if backend not in ("openrouter", "huggingface"):
-        raise ValueError("llm.backend must be 'openrouter' or 'huggingface'.")
-    defaults = ({"temperature": 0, "max_tokens": 1024, "timeout": 120} if backend == "openrouter"
+    if backend not in ("openrouter", "huggingface", "sglang"):
+        raise ValueError("llm.backend must be 'openrouter', 'huggingface', or 'sglang'.")
+    defaults = ({"temperature": 0, "max_tokens": 1024, "timeout": 120} if backend != "huggingface"
                 else {"device_map": "auto"})
     settings = {**defaults, "backend": backend, "max_attempts": 3, **settings}
     if backend == "huggingface":
@@ -311,12 +312,17 @@ def run_analysis(cfg):
     model = settings.get("model")
     if not isinstance(model, str) or not model.strip():
         raise ValueError("Set llm.model to a model ID or local HF model directory.")
-    for key in (("max_attempts", "max_tokens") if backend == "openrouter" else ("max_attempts",)):
+    for key in (("max_attempts", "max_tokens") if backend != "huggingface" else ("max_attempts",)):
         if type(settings[key]) is not int or settings[key] < 1:
             raise ValueError(f"llm.{key} must be a positive integer.")
-    if backend == "openrouter" and settings["timeout"] <= 0:
+    if backend != "huggingface" and settings["timeout"] <= 0:
         raise ValueError("llm.timeout must be positive.")
-    api_key = os.environ.get("OPENROUTER_API_KEY")
+    endpoint = ENDPOINT
+    if backend == "sglang":
+        endpoint = settings.get("endpoint")
+        if not isinstance(endpoint, str) or not endpoint.startswith(("http://", "https://")):
+            raise ValueError("Set llm.endpoint to the SGLang HTTP chat completions URL.")
+    api_key = os.environ.get("SGLANG_API_KEY" if backend == "sglang" else "OPENROUTER_API_KEY")
     if backend == "openrouter" and not api_key:
         raise ValueError("Set OPENROUTER_API_KEY in your environment.")
     batch_size = 1 if cfg["development"] else cfg.get("reports_per_batch", 8)
@@ -331,7 +337,7 @@ def run_analysis(cfg):
               Path(cfg["save_path"]) / "llm_edits" / cfg["data_name"] / run_id)
     metadata = {
         "run_id": run_id, "completed": False,
-        "endpoint": ENDPOINT if backend == "openrouter" else None, "llm": settings,
+        "endpoint": endpoint if backend != "huggingface" else None, "llm": settings,
         "data_name": cfg["data_name"], "data_path": str(Path(cfg["data_path"]).resolve()),
         "development": cfg["development"], "reports_per_batch": batch_size,
         "normalization": edits.NORMALIZATION, "empty_reports": empty_reports,
@@ -369,7 +375,7 @@ def run_analysis(cfg):
         classify = partial(_classify_batch, prompt=prompt, request=request, max_attempts=settings["max_attempts"])
         worker = partial(_analyze_batch, empty_reports=empty_reports, classify=classify, truncate=truncate, remove=remove)
     else:
-        request = partial(_request, api_key=api_key, **{key: settings[key] for key in (
+        request = partial(_request, endpoint=endpoint, api_key=api_key, **{key: settings[key] for key in (
             "model", "temperature", "max_tokens", "timeout",
         )})
         classify = partial(_classify, prompt=prompt, request=request, max_attempts=settings["max_attempts"])

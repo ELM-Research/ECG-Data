@@ -1,0 +1,10 @@
+defaults:
+  - ./llm_edits.yaml
+
+development: false
+resume_from: null
+data_path: /batch_data/agh/filtered_batch_meta_data_v3
+
+llm:
+  backend: sglang
+  endpoint: http://127.0.0.1:30000/v1/chat/completions
