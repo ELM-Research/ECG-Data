@@ -8,15 +8,17 @@ resume_from: null # Existing run directory; null starts a new run.
 
 study_options:
   empty_reports: exclude
-  remove: ["machine results only - see ed notes for md interpretation."] # Case-insensitive phrases; remove only matching statements.
-  truncate: ["when compared to the prior tracing of,", "when compared with ecg of", "no previous ecgs available", "no prior tracing for comparison"]
+  # remove: ["machine results only - see ed notes for md interpretation."] # Case-insensitive phrases; remove only matching statements.
+  remove: [] # Case-insensitive phrases; remove only matching statements.
+  truncate: ["when compared to the prior tracing of,", "when compared with ecg of", "no previous ecgs available", "no prior tracing for comparison", "no previous tracing for comparison"]
 
 plots:
-  run_id: 20261014T005053969109Z
+  run_id: 20261014T154559105558Z
 
 llm:
   # model: nvidia/nemotron-3-ultra-550b-a55b:free # Set your OpenRouter model ID (provider/model).
-  model: xiaomi/mimo-v2.6-pro
+  # model: xiaomi/mimo-v2.6-pro
+  model: openai/gpt-6-luna
   max_attempts: 3 # Total attempts per changed pair, including the first call.
   temperature: 0
   max_tokens: 1024

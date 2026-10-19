@@ -10,7 +10,7 @@ resume_from: null # Existing run directory; null starts a new run.
 study_options:
   empty_reports: exclude
   remove: ["machine results only - see ed notes for md interpretation."]
-  truncate: ["when compared to the prior tracing of,", "when compared with ecg of", "no previous ecgs available", "no prior tracing for comparison"]
+  truncate: ["when compared to the prior tracing of,", "when compared with ecg of", "no previous ecgs available", "no prior tracing for comparison", "no previous tracing for comparison"]
 
 plots:
   run_id: 20261012T211113590039Z

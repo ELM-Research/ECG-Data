@@ -71,11 +71,15 @@ def _request(messages, *, api_key, model, temperature, max_tokens, timeout):
     return result
 
 
-def _classify(software, physician, *, prompt, request, max_attempts):
+def _messages(software, physician, prompt):
     reports = {"software_report": software, "physician_report": physician}
     content = re.sub(r"\{(software_report|physician_report)\}",
                      lambda match: json.dumps(reports[match[1]], ensure_ascii=False), prompt)
-    messages = [{"role": "user", "content": content}]
+    return [{"role": "user", "content": content}]
+
+
+def _classify(software, physician, *, prompt, request, max_attempts):
+    messages = _messages(software, physician, prompt)
     attempts = []
     for number in range(1, max_attempts + 1):
         output = None
