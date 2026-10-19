@@ -36,7 +36,13 @@ def _unique_object(items):
 def _parse_output(content):
     if not isinstance(content, str):
         raise ValueError("Return a JSON object as text.")
-    result = json.loads(content, object_pairs_hook=_unique_object)
+    try:
+        result = json.loads(content, object_pairs_hook=_unique_object)
+    except json.JSONDecodeError:
+        # HF reasoning may precede the final JSON without an opening <think> tag.
+        if "</think>" not in content:
+            raise
+        result = json.loads(content.rsplit("</think>", 1)[1], object_pairs_hook=_unique_object)
     if not isinstance(result, dict) or set(result) != {"category", "explanation"}:
         raise ValueError("Return exactly the keys 'category' and 'explanation'.")
     if result["category"] not in CATEGORIES:
