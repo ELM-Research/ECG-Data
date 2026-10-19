@@ -2,7 +2,7 @@ defaults:
   - ./software_v_human_agh.yaml
 
 experiment: llm_edits
-development: false # Print and pause after each pair; false enables batches.
+development: true # Print and pause after each pair; false enables batches.
 reports_per_batch: 8 # Concurrent OpenRouter requests or one HF generation batch.
 resume_from: null # Existing run directory; null starts a new run.
 
@@ -16,10 +16,10 @@ plots:
   run_id: 20261014T154559105558Z
 
 llm:
-  backend: openrouter # openrouter | huggingface
+  backend: huggingface # openrouter | huggingface
   # model: nvidia/nemotron-3-ultra-550b-a55b:free # Set your OpenRouter model ID (provider/model).
   # model: xiaomi/mimo-v2.6-pro
-  model: openai/gpt-6-luna # For huggingface, use an HF model ID or local directory.
+  model: Qwen/Qwen3.8-27B # For huggingface, use an HF model ID or local directory.
   max_attempts: 3 # Total attempts per changed pair, including the first call.
   # device_map: auto # HF placement across visible GPUs; respects CUDA_VISIBLE_DEVICES.
   # OpenRouter only; Hugging Face uses the model's generation defaults.

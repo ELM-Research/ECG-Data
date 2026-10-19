@@ -5,25 +5,40 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "accelerate>=1.1.0",
-    "datasets>=4.4.2",
-    "h5py>=3.15.1",
-    "huggingface-hub>=1.33.0",
-    "matplotlib>=3.10.8",
-    "maturin>=1.11.5",
-    "numpy>=2.4.0",
-    "pandas>=2.3.3",
-    "scikit-learn>=1.8.0",
-    "scipy>=1.16.3",
-    "torch>=2.14.1",
-    "tqdm>=4.67.1",
-    "transformers>=4.57.3",
-    "wfdb>=4.3.0",
+    "accelerate",
+    "datasets",
+    "h5py",
+    "huggingface-hub",
+    "matplotlib",
+    "maturin",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "scipy",
+    "torch",
+    "tqdm",
+    "transformers",
+    "wfdb",
+    "flash-linear-attention[cuda]==0.5.1",
+    "causal-conv1d>=1.6.2.post1",
+    "kernels",
+    "bitsandbytes",
 ]
+
+[tool.uv]
+override-dependencies = ["triton==3.3.1"]
+
+
+[[tool.uv.index]]
+name = "astral-cu128"
+url = "https://wheels.astral.sh/simple/cu128/"
 
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+causal-conv1d = { index = "astral-cu128" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

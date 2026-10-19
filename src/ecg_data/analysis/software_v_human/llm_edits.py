@@ -94,7 +94,7 @@ def _load_hf(model, device_map="auto"):
             return_tensors="pt", return_dict=True,
         ).to(model.device)
         with torch.inference_mode():
-            outputs = model.generate(**inputs, pad_token_id=tokenizer.pad_token_id)
+            outputs = model.generate(**inputs, pad_token_id=tokenizer.pad_token_id, max_new_tokens=512)
         if hasattr(outputs, "sequences"):
             outputs = outputs.sequences
         contents = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
