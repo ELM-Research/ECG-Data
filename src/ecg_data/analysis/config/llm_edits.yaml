@@ -8,6 +8,7 @@ resume_from: null # Existing run directory; null starts a new run.
 
 study_options:
   empty_reports: exclude
+  skip: [] # Case-insensitive phrases; exclude pairs matching either original report.
   # remove: ["machine results only - see ed notes for md interpretation."] # Case-insensitive phrases; remove only matching statements.
   remove: [] # Case-insensitive phrases; remove only matching statements.
   truncate: ["when compared to the prior tracing of,", "when compared with ecg of", "no previous ecgs available", "no prior tracing for comparison", "no previous tracing for comparison"]

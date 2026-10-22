@@ -88,7 +88,8 @@ def estimate(cfg, *, chars_per_token=4, output_tokens=None):
     prices = _pricing(model)
     options = cfg.get("study_options", {})
     options = {"empty_reports": options.get("empty_reports", "exclude"),
-               "truncate": options.get("truncate", []), "remove": options.get("remove", [])}
+               "truncate": options.get("truncate", []), "remove": options.get("remove", []),
+               "skip": options.get("skip", [])}
     prompt = llm_edits.PROMPT_PATH.read_text()
     changed = input_tokens = total = excluded = unchanged = 0
 
