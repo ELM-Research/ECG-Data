@@ -16,6 +16,10 @@ study_options:
 plots:
   run_id: 20261022T001621468135Z
 
+annotations:
+  sample_size: 200 # Random sample of successfully classified pairs; use all if fewer.
+  seed: 0 # Reuse the seed to reproduce the sample from the same saved run.
+
 llm:
   backend: huggingface # openrouter | huggingface
   # model: nvidia/nemotron-3-ultra-550b-a55b:free # Set your OpenRouter model ID (provider/model).

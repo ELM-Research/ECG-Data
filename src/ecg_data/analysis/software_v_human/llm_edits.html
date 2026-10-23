@@ -109,6 +109,8 @@
   const badge = value => `<span class="badge ${escape(value)}">${escape(title(value))}</span>`;
   const pageSize = 30;
   let matches = [], page = 0, selected = null, query = null;
+  let annotation = null;
+  /* ANNOTATION SCRIPT */
 
   function phrasePattern(text) {
     text = text.trim();
@@ -154,7 +156,7 @@
 
   function renderList() {
     $('matches').textContent = `${number(matches.length)} pairs`;
-    $('list').innerHTML = matches.slice(page * pageSize, (page + 1) * pageSize).map((record, index) => `<button class="record" data-index="${page * pageSize + index}" aria-current="${record === selected}"><div class="between"><strong>Pair ${number(record.pair_index)}</strong>${badge(record.category || record.status)}</div><small>${escape(name('source', record.source))} · ${escape(record.file.split(/[\\/]/).pop())}</small><small>${escape(name('change', record.change) || 'Excluded from comparison')}</small></button>`).join('') || '<p class="empty">No matching pairs.</p>';
+    $('list').innerHTML = matches.slice(page * pageSize, (page + 1) * pageSize).map((record, index) => `<button class="record" data-index="${page * pageSize + index}" aria-current="${record === selected}"><div class="between"><strong>Pair ${number(record.pair_index)}</strong>${badge(record.category || record.status)}</div><small>${escape(name('source', record.source))} · ${escape(record.file.split(/[\\/]/).pop())}</small><small>${escape(name('change', record.change) || 'Excluded from comparison')}</small>${annotation ? annotation.label(record) : ''}</button>`).join('') || '<p class="empty">No matching pairs.</p>';
     $('page').textContent = matches.length ? `${page + 1} / ${Math.ceil(matches.length / pageSize)}` : '0 / 0';
     $('previous').disabled = page === 0;
     $('next').disabled = (page + 1) * pageSize >= matches.length;
@@ -184,6 +186,7 @@
     const noExplanation = {unchanged: 'Literal reports are unchanged; no LLM call was needed.', excluded: 'Excluded before classification; see input status.', skipped: 'No valid classification after the saved attempts; see errors below.'};
     $('detail').innerHTML = `<div class="between"><h2>Pair ${number(record.pair_index)} · ${escape(name('source', record.source))}</h2>${badge(record.category || record.status)}</div>
       <p class="muted identity">${escape(record.file)}<br>File pair index: ${record.pair_index} (zero-based) · Status: ${escape(record.status)} · Input: ${escape(name('input', record.input_status))}<br>Literal change: ${escape(name('change', record.change) || 'Not compared')}</p>
+      ${annotation ? annotation.view(record) : ''}
       <div class="reports">${report('Software report', record.software_report, record.deleted, 'deleted')}${report('Physician report', record.physician_report, record.added, 'added')}</div>
       <section class="explanation"><h3>Model explanation</h3><div class="prose">${escape(record.explanation || noExplanation[record.status] || 'No explanation saved.')}</div></section>
       <h3>API attempts (${record.attempts.length})</h3>${record.attempts.map(attemptView).join('') || '<p class="muted">No API calls.</p>'}
@@ -202,7 +205,10 @@
   $('snapshot').textContent = `${data.run.completed ? 'Run complete' : 'Run unfinished'} · Exported ${new Date(data.exported_at).toLocaleString()}`;
   if (data.incomplete_tail) $('snapshot').append(' · Unfinished final record omitted.');
   $('run').textContent = JSON.stringify(data.run, null, 2);
-  $('figures').innerHTML = Object.entries(data.figures).flatMap(([source, paths]) => paths.map(path => `<a href="${escape(path)}" target="_blank" rel="noopener"><img loading="lazy" src="${escape(path)}" alt="${escape(name('source', source))}: ${escape(path.split('/').pop().replaceAll('_', ' '))}"></a>`)).join('');
+  $('figures').innerHTML = Object.entries(data.figures).flatMap(([source, paths]) => paths.map(item => {
+    const {path, label} = typeof item === 'string' ? {path: item, label: item.split('/').pop().replaceAll('_', ' ')} : item;
+    return `<a href="${escape(path)}" target="_blank" rel="noopener"><img loading="lazy" src="${escape(path)}" alt="${escape(name('source', source))}: ${escape(label)}"></a>`;
+  })).join('');
   filter();
 </script>
 </body>

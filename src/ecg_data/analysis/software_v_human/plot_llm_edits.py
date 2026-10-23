@@ -69,6 +69,16 @@ def _plot_llm(results, output):
         )
 
 
+def _write_page(snapshot, page, annotation_script=""):
+    template = Path(__file__).with_name("llm_edits.html").read_text()
+    # Escape '<' so report text cannot close the embedded JSON script element.
+    payload = json.dumps(snapshot, allow_nan=False, separators=(",", ":")).replace("<", "\\u003c")
+    page.write_text(template.replace("/* ANNOTATION SCRIPT */", annotation_script)
+                   .replace("<!-- SNAPSHOT -->", payload))
+    print(f"Saved {len(snapshot['pairs']):,} pairs to {page}")
+    return page
+
+
 def export_run(root):
     root = Path(root)
     snapshot = _snapshot(root)
@@ -77,13 +87,7 @@ def export_run(root):
         output = root / "figures" / source
         _plot_llm({source: metrics}, output)
         snapshot["figures"][source] = [str(path.relative_to(root)) for path in sorted(output.glob("*.png"))]
-    template = Path(__file__).with_name("llm_edits.html").read_text()
-    # Escape '<' so report text cannot close the embedded JSON script element.
-    payload = json.dumps(snapshot, allow_nan=False, separators=(",", ":")).replace("<", "\\u003c")
-    page = root / "index.html"
-    page.write_text(template.replace("<!-- SNAPSHOT -->", payload))
-    print(f"Saved {len(snapshot['pairs']):,} pairs to {page}")
-    return page
+    return _write_page(snapshot, root / "index.html")
 
 
 if __name__ == "__main__":
