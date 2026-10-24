@@ -1,11 +1,10 @@
 annotation = (() => {
+  // Save from the original page so rendered controls never accumulate in the file.
+  const template = document.documentElement.cloneNode(true);
   const categories = ['factual', 'preferential', 'uncertain'];
   const key = record => JSON.stringify([record.source, record.file, record.pair_index]);
-  const blank = () => ({category: null, explanation: '', updated_at: null});
-  const storageKey = `llm-edit-annotations:${data.annotation.sample_id}`;
-  const values = Object.fromEntries(data.pairs.map(record => [key(record), blank()]));
-  let handle = null, saving = false, revision = 0, savedRevision = -1, downloadedRevision = -1;
-  let saveError = '', draftError = '', message = '';
+  for (const record of data.pairs) record.annotation ??= {category: null, explanation: '', updated_at: null};
+  let handle = null, saving = false, revision = 0, savedRevision = 0, error = '';
 
   const style = document.createElement('style');
   style.textContent = `
@@ -23,10 +22,10 @@ annotation = (() => {
   document.head.append(style);
   const tools = document.createElement('section');
   tools.className = 'panel';
-  tools.setAttribute('aria-label', 'Annotation files');
+  tools.setAttribute('aria-label', 'Annotation saving');
   tools.innerHTML = `<div class="between"><h2>Annotations</h2><strong id="annotation-progress"></strong></div>
     <p id="annotation-sample" class="muted"></p>
-    <div class="annotation-actions"><button id="annotation-save">Choose autosave file</button><button id="annotation-download">Download JSON</button><button id="annotation-load">Load annotations</button><input id="annotation-file" type="file" accept=".json,application/json" hidden></div>
+    <div class="annotation-actions"><button id="annotation-save">Enable HTML autosave</button></div>
     <p id="annotation-status" role="status" aria-live="polite"></p>
     <small id="annotation-help"></small>`;
   document.querySelector('.workspace').before(tools);
@@ -35,79 +34,47 @@ annotation = (() => {
   const canAutosave = typeof window.showSaveFilePicker === 'function';
   $('annotation-save').disabled = !canAutosave;
   $('annotation-help').textContent = canAutosave
-    ? 'Choose a JSON file once; every edit then overwrites it. After reopening, choose the file again to resume autosave. Send the latest JSON file when finished.'
-    : 'Automatic file saving needs Chrome or Edge. Browser drafts save on each edit; use Download JSON to save a file, and Load annotations to resume it elsewhere.';
+    ? 'At the start of each editing session, select this HTML file to enable autosave. Every edit updates it. Reopen it to restore annotations. Return this same HTML file when finished.'
+    : 'Open this file in desktop Chrome or Edge to enable annotation autosave.';
 
-  function readSaved(result) {
-    if (result.schema_version !== 1 || result.sample_id !== sample.sample_id) throw new Error('This file belongs to a different sample or format.');
-    if (!Array.isArray(result.pairs) || result.pairs.length !== data.pairs.length) throw new Error('The saved sample is incomplete.');
-    const restored = {};
-    for (const record of result.pairs) {
-      const id = key(record), value = record.annotation;
-      if (!Object.hasOwn(values, id) || Object.hasOwn(restored, id)) throw new Error('The saved pair identities do not match this sample.');
-      if (!value || ![null, ...categories].includes(value.category) || typeof value.explanation !== 'string'
-          || !(value.updated_at === null || typeof value.updated_at === 'string' && Number.isFinite(Date.parse(value.updated_at)))) {
-        throw new Error('Invalid saved annotation.');
-      }
-      if (value.updated_at === null && (value.category !== null || value.explanation !== '')) throw new Error('Annotation timestamp is missing.');
-      restored[id] = {category: value.category, explanation: value.explanation, updated_at: value.updated_at};
-    }
-    return restored;
-  }
-
-  function result(full = true) {
-    const pairs = data.pairs.map(record => ({
-      ...(full ? record : {source: record.source, file: record.file, pair_index: record.pair_index}),
-      annotation: values[key(record)],
-    }));
-    const saved = {schema_version: 1, sample_id: sample.sample_id, pairs};
-    return full ? {...saved, saved_at: new Date().toISOString(), exported_at: data.exported_at,
-      run: data.run, sampling: sample, incomplete_tail: data.incomplete_tail} : saved;
-  }
-
-  function persistDraft() {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(result(false)));
-      draftError = '';
-    } catch (error) {
-      draftError = `Browser draft unavailable: ${error.message}`;
-    }
+  function savedHtml() {
+    const output = template.cloneNode(true);
+    const snapshot = {...data, annotation_saved_at: new Date().toISOString()};
+    output.querySelector('#data').textContent = JSON.stringify(snapshot).replace(/</g, '\\u003c');
+    return '<!doctype html>\n' + output.outerHTML;
   }
 
   function updateStatus() {
-    const count = Object.values(values).filter(value => value.category !== null).length;
+    const count = data.pairs.filter(record => record.annotation.category !== null).length;
     $('annotation-progress').textContent = `${count} / ${data.pairs.length} labelled`;
-    let status = handle
-      ? saving ? `Saving to ${handle.name}…` : savedRevision === revision ? `Saved to ${handle.name}.` : `Changes pending for ${handle.name}.`
-      : 'Choose an autosave file, or download the latest JSON before sending it.';
-    if (revision && !handle && !draftError) status = 'Browser draft saved. ' + status;
-    $('annotation-status').textContent = [message, saveError || status, draftError].filter(Boolean).join(' ');
-    $('annotation-status').className = saveError || draftError ? 'error' : 'muted';
-    $('annotation-save').textContent = handle ? 'Save now' : 'Choose autosave file';
+    $('annotation-status').textContent = error || (!handle ? 'Enable HTML autosave to start annotating.'
+      : saving ? `Saving to ${handle.name}…` : `Saved to ${handle.name}. Return this HTML file.`);
+    $('annotation-status').className = error ? 'error' : 'muted';
+    $('annotation-save').textContent = handle ? 'Save now' : 'Enable HTML autosave';
   }
 
   async function saveFile() {
     if (!handle || saving) return;
     saving = true;
-    saveError = '';
+    error = '';
     updateStatus();
     try {
-      // Serialize writes; edits made during a write are saved by the next pass.
+      // A later edit waits for the current write, then replaces it with the latest state.
       while (savedRevision !== revision) {
         const current = revision;
-        const contents = JSON.stringify(result(), null, 2) + '\n';
+        const contents = savedHtml();
         const stream = await handle.createWritable();
         try {
           await stream.write(contents);
           await stream.close();
-        } catch (error) {
+        } catch (failure) {
           await stream.abort().catch(() => {});
-          throw error;
+          throw failure;
         }
         savedRevision = current;
       }
-    } catch (error) {
-      saveError = `File save failed: ${error.message}. Use Save now to retry, or Download JSON.`;
+    } catch (failure) {
+      error = `File save failed: ${failure.message}. Use Save now to retry before closing.`;
     } finally {
       saving = false;
       updateStatus();
@@ -115,39 +82,35 @@ annotation = (() => {
   }
 
   function changed() {
+    selected.annotation.updated_at = new Date().toISOString();
     revision += 1;
-    message = '';
-    persistDraft();
-    updateStatus();
     renderList();
     void saveFile();
   }
 
   function view(record) {
-    const value = values[key(record)];
+    const value = record.annotation;
+    const disabled = handle ? '' : ' disabled';
     return `<section class="annotation-box" aria-label="Annotate Here"><h2>Annotate Here</h2>
-      <fieldset><legend>Your classification · choose one</legend><div class="annotation-options">${categories.map(category => `<label><input type="radio" name="annotation-category" value="${category}"${value.category === category ? ' checked' : ''}>${title(category)}</label>`).join('')}</div></fieldset>
-      <label for="annotation-explanation">Brief explanation<textarea id="annotation-explanation" rows="3" placeholder="Why did you choose this category?">${escape(value.explanation)}</textarea></label>
-      <div class="annotation-actions"><button id="annotation-clear">Clear annotation</button></div></section>`;
+      <fieldset${disabled}><legend>Your classification · choose one</legend><div class="annotation-options">${categories.map(category => `<label><input type="radio" name="annotation-category" value="${category}"${value.category === category ? ' checked' : ''}>${title(category)}</label>`).join('')}</div></fieldset>
+      <label for="annotation-explanation">Brief explanation<textarea id="annotation-explanation" rows="3" placeholder="Why did you choose this category?"${disabled}>${escape(value.explanation)}</textarea></label>
+      <div class="annotation-actions"><button id="annotation-clear"${disabled}>Clear annotation</button></div></section>`;
   }
 
   $('detail').addEventListener('change', event => {
-    if (!selected || event.target.name !== 'annotation-category') return;
-    const value = values[key(selected)];
-    value.category = event.target.value;
-    value.updated_at = new Date().toISOString();
+    if (!handle || !selected || event.target.name !== 'annotation-category') return;
+    selected.annotation.category = event.target.value;
     changed();
   });
   $('detail').addEventListener('input', event => {
-    if (!selected || event.target.id !== 'annotation-explanation') return;
-    const value = values[key(selected)];
-    value.explanation = event.target.value;
-    value.updated_at = new Date().toISOString();
+    if (!handle || !selected || event.target.id !== 'annotation-explanation') return;
+    selected.annotation.explanation = event.target.value;
     changed();
   });
   $('detail').addEventListener('click', event => {
-    if (!selected || event.target.id !== 'annotation-clear') return;
-    values[key(selected)] = {...blank(), updated_at: new Date().toISOString()};
+    if (!handle || !selected || event.target.id !== 'annotation-clear') return;
+    selected.annotation.category = null;
+    selected.annotation.explanation = '';
     changed();
     renderDetail();
   });
@@ -156,76 +119,46 @@ annotation = (() => {
     if (handle) { await saveFile(); return; }
     $('annotation-save').disabled = true;
     try {
+      const filename = decodeURIComponent(window.location.pathname.split('/').pop()) || 'annotations.html';
       const chosen = await window.showSaveFilePicker({
-        suggestedName: `annotations-${sample.sample_id.slice(0, 12)}.json`,
-        types: [{description: 'Annotations JSON', accept: {'application/json': ['.json']}}],
+        suggestedName: /\.html?$/i.test(filename) ? filename : 'annotations.html',
+        types: [{description: 'Annotation HTML', accept: {'text/html': ['.html', '.htm']}}],
       });
       const file = await chosen.getFile();
       if (file.size) {
-        const restored = readSaved(JSON.parse(await file.text()));
-        for (const [id, value] of Object.entries(restored)) {
-          if (Date.parse(value.updated_at || '') > (Date.parse(values[id].updated_at || '') || 0)) values[id] = value;
+        const page = new DOMParser().parseFromString(await file.text(), 'text/html');
+        const payload = page.getElementById('data');
+        if (!payload) throw new Error('Choose an annotation HTML file.');
+        const saved = JSON.parse(payload.textContent);
+        if (saved.annotation?.sample_id !== sample.sample_id || saved.pairs?.length !== data.pairs.length
+            || saved.pairs.some((record, index) => key(record) !== key(data.pairs[index]))) {
+          throw new Error('This HTML file belongs to a different sample.');
         }
-        revision += 1;
-        persistDraft();
-        renderList();
-        renderDetail();
+        for (const [index, record] of saved.pairs.entries()) {
+          if (Date.parse(record.annotation?.updated_at || '') > (Date.parse(data.pairs[index].annotation.updated_at || '') || 0)) {
+            data.pairs[index].annotation = record.annotation;
+          }
+        }
       }
       handle = chosen;
-      message = '';
+      revision += 1;
       await saveFile();
-    } catch (error) {
-      if (error.name !== 'AbortError') message = `Cannot use this file: ${error.message}`;
+      renderList();
+      renderDetail();
+    } catch (failure) {
+      if (failure.name !== 'AbortError') error = `Cannot use this file: ${failure.message}`;
     } finally {
       $('annotation-save').disabled = false;
       updateStatus();
     }
   });
-
-  $('annotation-download').addEventListener('click', () => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(result(), null, 2) + '\n'], {type: 'application/json'}));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `annotations-${sample.sample_id.slice(0, 12)}.json`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    downloadedRevision = revision;
-  });
-  $('annotation-load').addEventListener('click', () => $('annotation-file').click());
-  $('annotation-file').addEventListener('change', async event => {
-    const file = event.target.files[0];
-    if (!file) return;
-    try {
-      const restored = readSaved(JSON.parse(await file.text()));
-      Object.assign(values, restored);
-      changed();
-      renderDetail();
-    } catch (error) {
-      message = `Cannot load annotations: ${error.message}`;
-      updateStatus();
-    } finally {
-      event.target.value = '';
-    }
-  });
   window.addEventListener('beforeunload', event => {
-    if (revision && (handle ? savedRevision : downloadedRevision) !== revision) {
+    if (savedRevision !== revision) {
       event.preventDefault();
       event.returnValue = '';
     }
   });
 
-  try {
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      Object.assign(values, readSaved(JSON.parse(saved)));
-      revision += 1;
-      message = 'Browser draft restored.';
-    }
-  } catch (error) {
-    draftError = `Could not restore browser draft: ${error.message}`;
-  }
   updateStatus();
-  return {view, label: record => `<small>${values[key(record)].category ? `Annotated · ${title(values[key(record)].category)}` : 'Unannotated'}</small>`};
+  return {view, label: record => `<small>${record.annotation.category ? `Annotated · ${title(record.annotation.category)}` : 'Unannotated'}</small>`};
 })();
