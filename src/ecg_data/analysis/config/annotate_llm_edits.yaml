@@ -1,0 +1,11 @@
+defaults:
+  - ./common.yaml
+
+experiment: llm_edits
+
+annotations:
+  sample_size: 200 # Balance datasets and preferential/factual within each dataset.
+  seed: 0
+  runs: # Combined annotations.html is saved in the first run.
+    agh: 20261022T002534861245Z
+    heedb: 20261024T054634520511Z

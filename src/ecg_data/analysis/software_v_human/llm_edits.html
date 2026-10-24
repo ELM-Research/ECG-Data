@@ -71,7 +71,7 @@
   <details class="panel"><summary>Run settings &amp; prompt</summary><pre id="run"></pre></details>
   <div id="stats" class="stats"></div>
   <section class="panel" aria-label="Category rates">
-    <div class="between"><h2>Meaning of the edits</h2><small>Selected source · before search filters</small></div>
+    <div class="between"><h2>Meaning of the edits</h2><small id="rate-scope">Selected source · before search filters</small></div>
     <div id="rates" class="rates"></div>
     <small>Category / successfully classified changed pairs. Skipped pairs are excluded. Factual means clinical meaning changed, not verified correction.</small>
     <p id="coverage" class="muted"></p>
@@ -111,6 +111,8 @@
   let matches = [], page = 0, selected = null, query = null;
   let annotation = null;
   /* ANNOTATION SCRIPT */
+  const filterKeys = annotation ? ['status', 'category', 'change'] : ['source', 'status', 'category', 'change'];
+  const pairNumber = record => annotation ? annotation.number(record) : record.pair_index;
 
   function phrasePattern(text) {
     text = text.trim();
@@ -131,7 +133,7 @@
   }
 
   function overview() {
-    const sources = Object.entries(data.summary).filter(([source]) => !$('source').value || source === $('source').value);
+    const sources = Object.entries(data.summary).filter(([source]) => annotation || !$('source').value || source === $('source').value);
     const sum = key => sources.reduce((total, [, metrics]) => total + metrics[key], 0);
     const total = sum('input_reports'), changed = sum('edited_reports'), classified = sum('classified_reports');
     const stats = [['Saved pairs', total], ['Unchanged', sum('included_reports') - changed], ['Classified', classified], ['Skipped', sum('skipped_reports')], ['Excluded', sum('excluded_reports')]];
@@ -145,7 +147,7 @@
 
   function filter() {
     query = phrasePattern($('query').value);
-    matches = data.pairs.filter(record => ['source', 'status', 'category', 'change'].every(key => !$(key).value || record[key] === $(key).value)
+    matches = (annotation ? annotation.pairs : data.pairs).filter(record => filterKeys.every(key => !$(key).value || record[key] === $(key).value)
       && (!query || [...(record.software_report || []), ...(record.physician_report || [])].some(item => query.test(item))));
     page = 0;
     selected = matches[0] || null;
@@ -156,7 +158,7 @@
 
   function renderList() {
     $('matches').textContent = `${number(matches.length)} pairs`;
-    $('list').innerHTML = matches.slice(page * pageSize, (page + 1) * pageSize).map((record, index) => `<button class="record" data-index="${page * pageSize + index}" aria-current="${record === selected}"><div class="between"><strong>Pair ${number(record.pair_index)}</strong>${badge(record.category || record.status)}</div><small>${escape(name('source', record.source))} · ${escape(record.file.split(/[\\/]/).pop())}</small><small>${escape(name('change', record.change) || 'Excluded from comparison')}</small>${annotation ? annotation.label(record) : ''}</button>`).join('') || '<p class="empty">No matching pairs.</p>';
+    $('list').innerHTML = matches.slice(page * pageSize, (page + 1) * pageSize).map((record, index) => `<button class="record" data-index="${page * pageSize + index}" aria-current="${record === selected}"><div class="between"><strong>Pair ${number(pairNumber(record))}</strong>${badge(record.category || record.status)}</div>${annotation ? '' : `<small>${escape(name('source', record.source))} · ${escape(record.file.split(/[\\/]/).pop())}</small>`}<small>${escape(name('change', record.change) || 'Excluded from comparison')}</small>${annotation ? annotation.label(record) : ''}</button>`).join('') || '<p class="empty">No matching pairs.</p>';
     $('page').textContent = matches.length ? `${page + 1} / ${Math.ceil(matches.length / pageSize)}` : '0 / 0';
     $('previous').disabled = page === 0;
     $('next').disabled = (page + 1) * pageSize >= matches.length;
@@ -184,31 +186,35 @@
     const record = selected;
     if (!record) { $('detail').innerHTML = '<div class="empty">No pairs to display. Change or reset the filters.</div>'; return; }
     const noExplanation = {unchanged: 'Literal reports are unchanged; no LLM call was needed.', excluded: 'Excluded before classification; see input status.', skipped: 'No valid classification after the saved attempts; see errors below.'};
-    $('detail').innerHTML = `<div class="between"><h2>Pair ${number(record.pair_index)} · ${escape(name('source', record.source))}</h2>${badge(record.category || record.status)}</div>
-      <p class="muted identity">${escape(record.file)}<br>File pair index: ${record.pair_index} (zero-based) · Status: ${escape(record.status)} · Input: ${escape(name('input', record.input_status))}<br>Literal change: ${escape(name('change', record.change) || 'Not compared')}</p>
+    const identity = annotation ? '' : `${escape(record.file)}<br>File pair index: ${record.pair_index} (zero-based) · `;
+    $('detail').innerHTML = `<div class="between"><h2>Pair ${number(pairNumber(record))}${annotation ? '' : ` · ${escape(name('source', record.source))}`}</h2>${badge(record.category || record.status)}</div>
+      <p class="muted identity">${identity}Status: ${escape(record.status)} · Input: ${escape(name('input', record.input_status))}<br>Literal change: ${escape(name('change', record.change) || 'Not compared')}</p>
       ${annotation ? annotation.view(record) : ''}
       <div class="reports">${report('Software report', record.software_report, record.deleted, 'deleted')}${report('Physician report', record.physician_report, record.added, 'added')}</div>
       <section class="explanation"><h3>Model explanation</h3><div class="prose">${escape(record.explanation || noExplanation[record.status] || 'No explanation saved.')}</div></section>
-      <h3>API attempts (${record.attempts.length})</h3>${record.attempts.map(attemptView).join('') || '<p class="muted">No API calls.</p>'}
-      <details><summary>Full saved pair</summary><pre>${json(record)}</pre></details>`;
+      ${annotation ? '' : `<h3>API attempts (${record.attempts.length})</h3>${record.attempts.map(attemptView).join('') || '<p class="muted">No API calls.</p>'}
+      <details><summary>Full saved pair</summary><pre>${json(record)}</pre></details>`}`;
   }
 
   for (const [id, keys] of Object.entries({source: Object.keys(data.summary), status: ['excluded', 'unchanged', 'classified', 'skipped'], category: ['preferential', 'factual', 'uncertain'], change: Object.keys(data.names.change)})) {
+    if (!filterKeys.includes(id)) continue;
     for (const key of keys) $(id).add(new Option(id === 'source' || id === 'change' ? name(id, key) : title(key), key));
     $(id).addEventListener('change', filter);
   }
   $('query').addEventListener('input', filter);
-  $('reset').addEventListener('click', () => { for (const key of ['query', 'source', 'status', 'category', 'change']) $(key).value = ''; filter(); });
+  $('reset').addEventListener('click', () => { for (const key of ['query', ...filterKeys]) $(key).value = ''; filter(); });
   $('list').addEventListener('click', event => { const button = event.target.closest('button[data-index]'); if (button) { selected = matches[Number(button.dataset.index)]; renderList(); renderDetail(); } });
   for (const [id, step] of [['previous', -1], ['next', 1]]) $(id).addEventListener('click', () => { page += step; selected = matches[page * pageSize]; renderList(); renderDetail(); $('list').scrollTop = 0; });
   $('model').textContent = data.run.llm.model;
   $('snapshot').textContent = `${data.run.completed ? 'Run complete' : 'Run unfinished'} · Exported ${new Date(data.exported_at).toLocaleString()}`;
   if (data.incomplete_tail) $('snapshot').append(' · Unfinished final record omitted.');
-  $('run').textContent = JSON.stringify(data.run, null, 2);
-  $('figures').innerHTML = Object.entries(data.figures).flatMap(([source, paths]) => paths.map(item => {
-    const {path, label} = typeof item === 'string' ? {path: item, label: item.split('/').pop().replaceAll('_', ' ')} : item;
-    return `<a href="${escape(path)}" target="_blank" rel="noopener"><img loading="lazy" src="${escape(path)}" alt="${escape(name('source', source))}: ${escape(label)}"></a>`;
-  })).join('');
+  if (!annotation) {
+    $('run').textContent = JSON.stringify(data.run, null, 2);
+    $('figures').innerHTML = Object.entries(data.figures).flatMap(([source, paths]) => paths.map(item => {
+      const {path, label} = typeof item === 'string' ? {path: item, label: item.split('/').pop().replaceAll('_', ' ')} : item;
+      return `<a href="${escape(path)}" target="_blank" rel="noopener"><img loading="lazy" src="${escape(path)}" alt="${escape(name('source', source))}: ${escape(label)}"></a>`;
+    })).join('');
+  }
   filter();
 </script>
 </body>

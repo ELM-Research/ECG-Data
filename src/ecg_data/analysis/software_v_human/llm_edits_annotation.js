@@ -4,6 +4,8 @@ annotation = (() => {
   const categories = ['factual', 'preferential', 'uncertain'];
   const key = record => JSON.stringify([record.source, record.file, record.pair_index]);
   const sample = data.annotation;
+  const pairs = (sample.display_order || data.pairs.map((_, index) => index)).map(index => data.pairs[index]);
+  const numbers = new Map(pairs.map((record, index) => [record, index + 1]));
   const storageKey = `llm-edit-annotations:${sample.sample_id}`;
   for (const record of data.pairs) record.annotation ??= {category: null, explanation: '', updated_at: null};
   let unsaved = false, error = '';
@@ -20,8 +22,13 @@ annotation = (() => {
     .annotation-box legend { font-size: 12px; color: var(--muted); }
     .annotation-box textarea { width: 100%; resize: vertical; min-height: 80px; padding: 10px; border: 1px solid var(--line); border-radius: 7px; font: inherit; color: var(--ink); }
     .annotation-box textarea:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+    @media (min-width: 1001px) { .filters { grid-template-columns: minmax(260px, 2fr) repeat(3, 1fr); } }
   `;
   document.head.append(style);
+  $('source').closest('label').remove();
+  $('run').closest('details').remove();
+  $('figures').closest('details').remove();
+  $('rate-scope').textContent = 'Sample · before search filters';
   const tools = document.createElement('section');
   tools.className = 'panel';
   tools.setAttribute('aria-label', 'Annotation saving');
@@ -31,7 +38,7 @@ annotation = (() => {
     <p id="annotation-status" role="status" aria-live="polite"></p>
     <small id="annotation-help"></small>`;
   document.querySelector('.workspace').before(tools);
-  $('annotation-sample').textContent = `${sample.sample_size} / ${sample.eligible_pairs} eligible pairs · ${sample.method} · Seed ${sample.seed}. Overview and plots describe this sample.`;
+  $('annotation-sample').textContent = `${sample.sample_size} / ${sample.eligible_pairs} eligible pairs. Overview describes this sample.`;
   $('annotation-help').textContent = 'Every edit saves automatically in this browser. Reopen this same file in the same browser to continue. Download the annotated HTML to send your work or move it elsewhere. The original HTML file is not modified.';
 
   function savedHtml() {
@@ -135,5 +142,6 @@ annotation = (() => {
     error = `Cannot restore browser annotations: ${failure.message}. Download the annotated HTML before closing.`;
     updateStatus();
   }
-  return {view, label: record => `<small>${record.annotation.category ? `Annotated · ${title(record.annotation.category)}` : 'Unannotated'}</small>`};
+  return {pairs, number: record => numbers.get(record), view,
+    label: record => `<small>${record.annotation.category ? `Annotated · ${title(record.annotation.category)}` : 'Unannotated'}</small>`};
 })();
