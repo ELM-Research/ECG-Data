@@ -31,7 +31,7 @@ annotation = (() => {
     <p id="annotation-status" role="status" aria-live="polite"></p>
     <small id="annotation-help"></small>`;
   document.querySelector('.workspace').before(tools);
-  $('annotation-sample').textContent = `${sample.sample_size} / ${sample.eligible_pairs} successfully classified pairs · Random sample without replacement · Seed ${sample.seed}. Overview and plots describe this sample.`;
+  $('annotation-sample').textContent = `${sample.sample_size} / ${sample.eligible_pairs} eligible pairs · ${sample.method} · Seed ${sample.seed}. Overview and plots describe this sample.`;
   $('annotation-help').textContent = 'Every edit saves automatically in this browser. Reopen this same file in the same browser to continue. Download the annotated HTML to send your work or move it elsewhere. The original HTML file is not modified.';
 
   function savedHtml() {
