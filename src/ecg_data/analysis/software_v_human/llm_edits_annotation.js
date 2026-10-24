@@ -3,8 +3,10 @@ annotation = (() => {
   const template = document.documentElement.cloneNode(true);
   const categories = ['factual', 'preferential', 'uncertain'];
   const key = record => JSON.stringify([record.source, record.file, record.pair_index]);
+  const sample = data.annotation;
+  const storageKey = `llm-edit-annotations:${sample.sample_id}`;
   for (const record of data.pairs) record.annotation ??= {category: null, explanation: '', updated_at: null};
-  let handle = null, saving = false, revision = 0, savedRevision = 0, error = '';
+  let unsaved = false, error = '';
 
   const style = document.createElement('style');
   style.textContent = `
@@ -25,17 +27,12 @@ annotation = (() => {
   tools.setAttribute('aria-label', 'Annotation saving');
   tools.innerHTML = `<div class="between"><h2>Annotations</h2><strong id="annotation-progress"></strong></div>
     <p id="annotation-sample" class="muted"></p>
-    <div class="annotation-actions"><button id="annotation-save">Enable HTML autosave</button></div>
+    <div class="annotation-actions"><button id="annotation-download">Download annotated HTML</button></div>
     <p id="annotation-status" role="status" aria-live="polite"></p>
     <small id="annotation-help"></small>`;
   document.querySelector('.workspace').before(tools);
-  const sample = data.annotation;
   $('annotation-sample').textContent = `${sample.sample_size} / ${sample.eligible_pairs} successfully classified pairs · Random sample without replacement · Seed ${sample.seed}. Overview and plots describe this sample.`;
-  const canAutosave = typeof window.showSaveFilePicker === 'function';
-  $('annotation-save').disabled = !canAutosave;
-  $('annotation-help').textContent = canAutosave
-    ? 'At the start of each editing session, select this HTML file to enable autosave. Every edit updates it. Reopen it to restore annotations. Return this same HTML file when finished.'
-    : 'Open this file in desktop Chrome or Edge to enable annotation autosave.';
+  $('annotation-help').textContent = 'Every edit saves automatically in this browser. Reopen this same file in the same browser to continue. Download the annotated HTML to send your work or move it elsewhere. The original HTML file is not modified.';
 
   function savedHtml() {
     const output = template.cloneNode(true);
@@ -47,118 +44,96 @@ annotation = (() => {
   function updateStatus() {
     const count = data.pairs.filter(record => record.annotation.category !== null).length;
     $('annotation-progress').textContent = `${count} / ${data.pairs.length} labelled`;
-    $('annotation-status').textContent = error || (!handle ? 'Enable HTML autosave to start annotating.'
-      : saving ? `Saving to ${handle.name}…` : `Saved to ${handle.name}. Return this HTML file.`);
+    $('annotation-status').textContent = error || 'Saved in this browser.';
     $('annotation-status').className = error ? 'error' : 'muted';
-    $('annotation-save').textContent = handle ? 'Save now' : 'Enable HTML autosave';
   }
 
-  async function saveFile() {
-    if (!handle || saving) return;
-    saving = true;
-    error = '';
-    updateStatus();
+  function save() {
     try {
-      // A later edit waits for the current write, then replaces it with the latest state.
-      while (savedRevision !== revision) {
-        const current = revision;
-        const contents = savedHtml();
-        const stream = await handle.createWritable();
-        try {
-          await stream.write(contents);
-          await stream.close();
-        } catch (failure) {
-          await stream.abort().catch(() => {});
-          throw failure;
-        }
-        savedRevision = current;
-      }
+      const pairs = data.pairs.map(({source, file, pair_index, annotation}) => ({source, file, pair_index, annotation}));
+      localStorage.setItem(storageKey, JSON.stringify({sample_id: sample.sample_id, pairs}));
+      unsaved = false;
+      error = '';
     } catch (failure) {
-      error = `File save failed: ${failure.message}. Use Save now to retry before closing.`;
-    } finally {
-      saving = false;
-      updateStatus();
+      error = `Automatic saving failed: ${failure.message}. Download the annotated HTML before closing.`;
     }
+    updateStatus();
   }
 
   function changed() {
     selected.annotation.updated_at = new Date().toISOString();
-    revision += 1;
+    unsaved = true;
+    save();
     renderList();
-    void saveFile();
   }
 
   function view(record) {
     const value = record.annotation;
-    const disabled = handle ? '' : ' disabled';
     return `<section class="annotation-box" aria-label="Annotate Here"><h2>Annotate Here</h2>
-      <fieldset${disabled}><legend>Your classification · choose one</legend><div class="annotation-options">${categories.map(category => `<label><input type="radio" name="annotation-category" value="${category}"${value.category === category ? ' checked' : ''}>${title(category)}</label>`).join('')}</div></fieldset>
-      <label for="annotation-explanation">Brief explanation<textarea id="annotation-explanation" rows="3" placeholder="Why did you choose this category?"${disabled}>${escape(value.explanation)}</textarea></label>
-      <div class="annotation-actions"><button id="annotation-clear"${disabled}>Clear annotation</button></div></section>`;
+      <fieldset><legend>Your classification · choose one</legend><div class="annotation-options">${categories.map(category => `<label><input type="radio" name="annotation-category" value="${category}"${value.category === category ? ' checked' : ''}>${title(category)}</label>`).join('')}</div></fieldset>
+      <label for="annotation-explanation">Brief explanation<textarea id="annotation-explanation" rows="3" placeholder="Why did you choose this category?">${escape(value.explanation)}</textarea></label>
+      <div class="annotation-actions"><button id="annotation-clear">Clear annotation</button></div></section>`;
   }
 
   $('detail').addEventListener('change', event => {
-    if (!handle || !selected || event.target.name !== 'annotation-category') return;
+    if (!selected || event.target.name !== 'annotation-category') return;
     selected.annotation.category = event.target.value;
     changed();
   });
   $('detail').addEventListener('input', event => {
-    if (!handle || !selected || event.target.id !== 'annotation-explanation') return;
+    if (!selected || event.target.id !== 'annotation-explanation') return;
     selected.annotation.explanation = event.target.value;
     changed();
   });
   $('detail').addEventListener('click', event => {
-    if (!handle || !selected || event.target.id !== 'annotation-clear') return;
+    if (!selected || event.target.id !== 'annotation-clear') return;
     selected.annotation.category = null;
     selected.annotation.explanation = '';
     changed();
     renderDetail();
   });
 
-  $('annotation-save').addEventListener('click', async () => {
-    if (handle) { await saveFile(); return; }
-    $('annotation-save').disabled = true;
-    try {
-      const filename = decodeURIComponent(window.location.pathname.split('/').pop()) || 'annotations.html';
-      const chosen = await window.showSaveFilePicker({
-        suggestedName: /\.html?$/i.test(filename) ? filename : 'annotations.html',
-        types: [{description: 'Annotation HTML', accept: {'text/html': ['.html', '.htm']}}],
-      });
-      const file = await chosen.getFile();
-      if (file.size) {
-        const page = new DOMParser().parseFromString(await file.text(), 'text/html');
-        const payload = page.getElementById('data');
-        if (!payload) throw new Error('Choose an annotation HTML file.');
-        const saved = JSON.parse(payload.textContent);
-        if (saved.annotation?.sample_id !== sample.sample_id || saved.pairs?.length !== data.pairs.length
-            || saved.pairs.some((record, index) => key(record) !== key(data.pairs[index]))) {
-          throw new Error('This HTML file belongs to a different sample.');
-        }
-        for (const [index, record] of saved.pairs.entries()) {
-          if (Date.parse(record.annotation?.updated_at || '') > (Date.parse(data.pairs[index].annotation.updated_at || '') || 0)) {
-            data.pairs[index].annotation = record.annotation;
-          }
-        }
-      }
-      handle = chosen;
-      revision += 1;
-      await saveFile();
-      renderList();
-      renderDetail();
-    } catch (failure) {
-      if (failure.name !== 'AbortError') error = `Cannot use this file: ${failure.message}`;
-    } finally {
-      $('annotation-save').disabled = false;
-      updateStatus();
-    }
+  $('annotation-download').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([savedHtml()], {type: 'text/html'}));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `annotations-${sample.sample_id.slice(0, 12)}.html`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    unsaved = false;
   });
   window.addEventListener('beforeunload', event => {
-    if (savedRevision !== revision) {
+    if (unsaved) {
       event.preventDefault();
       event.returnValue = '';
     }
   });
 
-  updateStatus();
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+    if (saved) {
+      if (saved.sample_id !== sample.sample_id || !Array.isArray(saved.pairs) || saved.pairs.length !== data.pairs.length
+          || saved.pairs.some((record, index) => {
+            const value = record.annotation;
+            return key(record) !== key(data.pairs[index]) || !value || ![null, ...categories].includes(value.category)
+              || typeof value.explanation !== 'string' || (value.updated_at === null
+                ? value.category !== null || value.explanation !== ''
+                : typeof value.updated_at !== 'string' || !Number.isFinite(Date.parse(value.updated_at)));
+          })) {
+        throw new Error('Invalid saved annotations for this sample.');
+      }
+      for (const [index, record] of saved.pairs.entries()) {
+        if (Date.parse(record.annotation.updated_at) >= (Date.parse(data.pairs[index].annotation.updated_at) || 0)) {
+          data.pairs[index].annotation = record.annotation;
+        }
+      }
+    }
+    save();
+  } catch (failure) {
+    error = `Cannot restore browser annotations: ${failure.message}. Download the annotated HTML before closing.`;
+    updateStatus();
+  }
   return {view, label: record => `<small>${record.annotation.category ? `Annotated · ${title(record.annotation.category)}` : 'Unannotated'}</small>`};
 })();
