@@ -1,0 +1,10 @@
+defaults:
+  - ./llm_edits2.yaml
+
+development: false
+resume_from: null
+data_path: /batch_data/heedb/preprocessed_250_10
+
+llm:
+  backend: sglang
+  endpoint: http://127.0.0.1:30002/v1/chat/completions
