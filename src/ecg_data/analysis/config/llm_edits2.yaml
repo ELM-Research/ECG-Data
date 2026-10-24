@@ -10,11 +10,11 @@ study_options:
   empty_reports: exclude
   skip: ["machine results only - see ed notes for md interpretation."] # Case-insensitive phrases; exclude pairs matching either original report.
   # remove: ["machine results only - see ed notes for md interpretation."] # Case-insensitive phrases; remove only matching statements.
-  remove: [] # Case-insensitive phrases; remove only matching statements.
-  truncate: ["when compared to the prior tracing of,", "when compared with ecg of", "no previous ecgs available", "no prior tracing for comparison", "no previous tracing for comparison"]
+  remove: ["confirmed by"] # Case-insensitive phrases; remove only matching statements.
+  truncate: ["when compared to the prior tracing of,", "when compared with ecg of", "no previous ecgs available", "no prior tracing for comparison", "no previous tracing for comparison", "no prior tracing"]
 
 plots:
-  run_id: 20261024T054634520511Z
+  run_id: 20261024T180255796492Z
 
 llm:
   backend: huggingface # openrouter | huggingface
