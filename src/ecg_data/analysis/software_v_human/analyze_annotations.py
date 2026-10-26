@@ -82,6 +82,10 @@ def report(records):
     print(f"\nAnnotator explanations: {len(explained)}")
     for record in explained:
         print(f"\nPair {record['display_number']}")
+        for label, key in (("Software", "software_report"), ("Physician", "physician_report")):
+            items = record[key]
+            text = "Report not saved." if items is None else "\n".join(items) or "Empty report."
+            print(f"{label} report:\n{text}")
         print(f"LLM [{record['model_category']}]:\n{record['model_explanation']}")
         print(f"Annotator [{record['human_category']}]:\n{record['human_explanation']}")
 
