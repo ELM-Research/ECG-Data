@@ -85,9 +85,10 @@ def report(records):
         for label, key in (("Software", "software_report"), ("Physician", "physician_report")):
             items = record[key]
             text = "Report not saved." if items is None else "\n".join(items) or "Empty report."
-            print(f"{label} report:\n{text}")
-        print(f"LLM [{record['model_category']}]:\n{record['model_explanation']}")
+            print(f"{label} report:\n{text}\n")
+        print(f"LLM [{record['model_category']}]:\n{record['model_explanation']}\n")
         print(f"Annotator [{record['human_category']}]:\n{record['human_explanation']}")
+        print("=" * 50)
 
 
 if __name__ == "__main__":
