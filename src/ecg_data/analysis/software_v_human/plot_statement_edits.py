@@ -3,7 +3,7 @@
 import argparse
 import json
 from collections import Counter, defaultdict
-from itertools import combinations
+from itertools import combinations, islice
 from pathlib import Path
 from textwrap import fill
 
@@ -76,6 +76,37 @@ def group_statements(records, statements):
     if not groups:
         raise ValueError("No AGH or HEEDB old software report pairs found.")
     return groups
+
+
+def print_examples(groups, path, limit=5):
+    """Print the first examples of each LLM label for every edited statement."""
+    width = 88
+    print(f"\nLLM statement examples: {path}")
+    print(f"First {limit} per category in JSONL order. Labels apply to whole report pairs.")
+    for dataset, statements in groups.items():
+        for statement, records in statements.items():
+            print(f"\n{'=' * width}\n{DATASET_NAMES[dataset]} | Statement: {statement}\n{'=' * width}")
+            counts = Counter(record.get("category") for record in records)
+            for category in (*CATEGORIES, "uncertain"):
+                total = counts[category]
+                print(f"\n{category.upper()} | Showing {min(limit, total)} of {total:,}\n{'-' * width}")
+                matches = (record for record in records if record.get("category") == category)
+                for number, record in enumerate(islice(matches, limit), 1):
+                    print(f"\n  Example {number} | Source: {record['source']} | Pair index: {record['pair_index']}")
+                    print(f"  File: {record['file']}")
+                    for label, field in (("Software report", "software_report"),
+                                         ("Physician report", "physician_report"),
+                                         ("Deleted", "deleted"), ("Added", "added")):
+                        print(f"\n  {label}:")
+                        items = record.get(field) or []
+                        if not items:
+                            print("    (none)")
+                        for item in items:
+                            print(fill(item, width, initial_indent="    - ", subsequent_indent="      "))
+                    print("\n  LLM explanation:")
+                    print(fill(record.get("explanation") or "(unavailable)", width,
+                               initial_indent="    ", subsequent_indent="    "))
+                    print(f"\n  {'.' * (width - 2)}")
 
 
 def summarize(records, field, reference):
@@ -173,9 +204,13 @@ if __name__ == "__main__":
     parser.add_argument("--annotations", type=Path, nargs="+",
                         help="Analysis JSONs in annotator order; save the combined figure beside the first.")
     parser.add_argument("--statements", nargs="+", required=True, help="Exact list items, ignoring case.")
+    parser.add_argument("--examples", type=int, default=5,
+                        help="Printed examples per statement and LLM category for each JSONL (default: 5).")
     args = parser.parse_args()
     if not (args.pairs or args.annotations):
         parser.error("Provide --pairs, --annotations, or both.")
+    if args.examples < 1:
+        parser.error("--examples must be positive.")
     statements = list(dict.fromkeys(statement.lower() for statement in args.statements))
     if any(not statement.strip() for statement in statements):
         parser.error("Statements must be nonblank.")
@@ -185,6 +220,7 @@ if __name__ == "__main__":
         if len(groups) != 1:
             raise ValueError(f"Expected one dataset in {path}.")
         plot_statements(groups, labels, path.with_name("llm_statements.png"))
+        print_examples(groups, path, args.examples)
     if args.annotations:
         records, labels = load_annotations(args.annotations)
         plot_statements(group_statements(records, statements), labels,
