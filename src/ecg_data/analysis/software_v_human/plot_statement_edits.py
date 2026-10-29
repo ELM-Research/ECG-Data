@@ -3,6 +3,7 @@
 import argparse
 import json
 from collections import Counter, defaultdict
+from itertools import combinations
 from pathlib import Path
 from textwrap import fill
 
@@ -77,25 +78,31 @@ def group_statements(records, statements):
     return groups
 
 
-def summarize(records, field, model):
+def summarize(records, field, reference):
     counts = Counter(record.get(field) for record in records)
     total = sum(counts[category] for category in CATEGORIES)
     compared = [record for record in records
-                if record.get(field) is not None and record.get(model) is not None]
+                if record.get(field) is not None and record.get(reference) is not None]
     return {
         "counts": counts, "total": total, "excluded": len(records) - total,
-        "aligned": sum(record[field] == record[model] for record in compared),
+        "aligned": sum(record[field] == record[reference] for record in compared),
         "compared": len(compared),
     }
+
+
+def agreement_text(row):
+    n, d = row["aligned"], row["compared"]
+    return f"{n:,}/{d:,} ({n / d:.0%})" if d else "unavailable"
 
 
 def plot_statements(groups, labels, output):
     annotated = len(labels) > 1
     model = next(iter(labels.values()))
+    comparisons = list(combinations(list(labels)[1:], 2))
     order = {dataset: index for index, dataset in enumerate(DATASET_NAMES)}
     datasets = sorted(groups, key=lambda dataset: (order.get(dataset, len(order)), dataset))
     statements = list(next(iter(groups.values())))
-    heights = [max(len(labels) + 0.5, (fill(statement, 30).count("\n") + 1) * 0.3)
+    heights = [max(len(labels) + 0.45 * len(comparisons) + 0.5, (fill(statement, 30).count("\n") + 1) * 0.3)
                for statement in statements]
     width = 3.2 + 4.5 * len(datasets)
     note = ("Exact statements, ignoring case; added/deleted only. Bars use preferential/factual labels; "
@@ -130,8 +137,7 @@ def plot_statements(groups, labels, output):
                 ax.text(0, y, name, fontsize=9, va="top", color="#64748b")
                 detail = f"n={row['total']:,}"
                 if field != model:
-                    n, d = row["aligned"], row["compared"]
-                    detail = f"Agreement {n:,}/{d:,} ({n / d:.0%})" if d else "Agreement unavailable"
+                    detail = f"LLM agreement {agreement_text(row)}"
                 ax.text(100, y, detail, ha="right", va="top", fontsize=8, color="#64748b")
                 left = 0
                 for category, color in zip(CATEGORIES, COLORS):
@@ -147,6 +153,12 @@ def plot_statements(groups, labels, output):
                 if not row["total"]:
                     ax.text(0, y + 0.36, "No preferential/factual edits", va="center", fontsize=9, color="#64748b")
                 ax.text(0, y + 0.6, fill(counts, 54), va="top", fontsize=8, color="#475569")
+            for index, (first, second) in enumerate(comparisons):
+                row = summarize(records, labels[first], labels[second])
+                y = top + len(labels) + 0.1 + 0.45 * index
+                ax.text(0, y, f"{first} vs {second}", va="top", fontsize=8, color="#64748b")
+                ax.text(100, y, f"Agreement {agreement_text(row)}",
+                        ha="right", va="top", fontsize=8, color="#64748b")
             top += group_height
             ax.axhline(top - 0.2, color="#e2e8f0", linewidth=0.7)
     fig.text(0.25 / width, 0.15 / height, note, va="bottom", fontsize=9, color="#64748b")
