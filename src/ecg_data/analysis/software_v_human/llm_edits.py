@@ -22,6 +22,7 @@ from ecg_data.analysis.software_v_human.reports import normalize_report, read_re
 ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 CATEGORIES = ("preferential", "factual", "uncertain")
 STATUSES = ("excluded", "unchanged", "classified", "skipped")
+SOURCES = {"agh": ("agh",), "heedb": ("heedb_old",)}
 PROMPT_PATH = Path(__file__).parents[1] / "config/prompts/edits_task.txt"
 INPUT_NORMALIZATION = {**edits.NORMALIZATION, "order": "preserve"}
 
@@ -166,8 +167,11 @@ def _classify(software, physician, *, prompt, request, max_attempts):
 
 
 def _pairs(paths, data_name):
+    """Select software-to-physician pairs for the LLM study."""
     for path in paths:
         for index, (source, software, physician) in enumerate(read_reports([path], data_name)):
+            if source not in SOURCES[data_name]:
+                continue
             yield {"source": source, "file": str(path.resolve()), "pair_index": index}, software, physician
 
 
@@ -270,7 +274,7 @@ def _pair_id(record):
     return record["source"], record["file"], record["pair_index"]
 
 
-def _load_saved(path, counts, retry_skipped=True):
+def _load_saved(path, counts, *, sources, retry_skipped=True):
     saved = set()
     good_lines = []
     with path.open("r+b") as file:
@@ -280,6 +284,9 @@ def _load_saved(path, counts, retry_skipped=True):
                 file.truncate(file.tell() - len(line))
                 break
             record = json.loads(line)
+            if record["source"] not in sources:
+                raise ValueError(f"Cannot resume: source {record['source']!r} is outside the LLM study. "
+                                 "Start a new run.")
             identity = _pair_id(record)
             if identity in saved:
                 raise ValueError(f"Duplicate saved pair: {identity}")
@@ -340,6 +347,7 @@ def run_analysis(cfg):
         "run_id": run_id, "completed": False,
         "endpoint": endpoint if backend != "huggingface" else None, "llm": settings,
         "data_name": cfg["data_name"], "data_path": str(Path(cfg["data_path"]).resolve()),
+        "sources": list(SOURCES[cfg["data_name"]]),
         "development": cfg["development"], "reports_per_batch": batch_size,
         "normalization": edits.NORMALIZATION, "empty_reports": empty_reports,
         "truncate": truncate, "remove": remove, "skip": skip,
@@ -359,7 +367,7 @@ def run_analysis(cfg):
             if previous[key] != metadata[key]:
                 raise ValueError(f"Cannot resume: {key} differs from the saved run.")
         metadata["run_id"] = previous["run_id"]
-        saved = _load_saved(output / "pairs.jsonl", counts)
+        saved = _load_saved(output / "pairs.jsonl", counts, sources=metadata["sources"])
         pairs = (item for item in pairs if _pair_id(item[0]) not in saved)
         print(f"Resuming {output}: {len(saved)} saved pairs")
     batch = tuple(islice(pairs, batch_size))

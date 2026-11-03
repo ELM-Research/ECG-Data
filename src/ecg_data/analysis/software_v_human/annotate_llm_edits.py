@@ -51,7 +51,7 @@ def export_annotations(root, *, sample_size=200, seed=0, extra_roots=()):
     if len({_pair_id(record) for record in eligible}) != len(eligible):
         raise ValueError("Duplicate classified pair identities in pairs.jsonl.")
 
-    # Balance datasets, pooling HEEDB software versions, then balance categories.
+    # Balance datasets, then categories within each dataset.
     groups = [[[index for index, record in enumerate(eligible)
                 if record["source"].split("_", 1)[0] == dataset and record["category"] == category]
                for category in categories] for dataset in datasets]

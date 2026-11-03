@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ecg_data.analysis.software_v_human.llm_edits import CATEGORIES, STATUSES, _count, summarize
+from ecg_data.analysis.software_v_human.llm_edits import CATEGORIES, SOURCES, STATUSES, _count, summarize
 from ecg_data.analysis.software_v_human.plot_edits import (
     CHANGE_NAMES, INPUT_NAMES, SOURCE_NAMES, _plot_rates, _plot_reports,
 )
@@ -23,6 +23,8 @@ def _snapshot(root):
             record = json.loads(line)
         except ValueError as error:
             raise ValueError(f"Invalid JSON in {root / 'pairs.jsonl'}:{number}") from error
+        if record["source"] not in SOURCES[run["data_name"]]:
+            continue
         pairs.append(record)
         _count(counts, record)
     return {
