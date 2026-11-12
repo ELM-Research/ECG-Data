@@ -1,5 +1,8 @@
 defaults:
-  - ./software_v_human_agh.yaml
+  - ./common.yaml
+
+data_name: agh
+data_path: /batch_data/agh/filtered_batch_meta_data_v3
 
 experiment: llm_edits
 development: false # Print and pause after each pair; false enables batches.

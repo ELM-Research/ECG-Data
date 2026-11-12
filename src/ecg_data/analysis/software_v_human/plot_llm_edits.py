@@ -23,7 +23,7 @@ from ecg_data.analysis.software_v_human.llm_edits import CATEGORIES, SOURCES, ST
 from ecg_data.analysis.software_v_human.terms import TERMS
 from ecg_data.preprocess.config.load import load_config
 
-SOURCE_NAMES = {"agh": "AGH", "heedb_old": "HEEDB (old software)"}
+SOURCE_NAMES = {"agh": "AGH", "heedb_old": "HEEDB"}
 CHANGE_NAMES = {
     "unchanged": "Unchanged", "added_only": "Physician added only",
     "deleted_only": "Physician deleted only", "both": "Physician added and deleted",
@@ -38,9 +38,9 @@ CATEGORY_COLORS = {"preferential": DARK_RED, "factual": LIGHT_RED, "uncertain": 
 SOURCE_COLORS = {"agh": RED, "heedb_old": GRAY}
 STATEMENT_CATEGORIES = ("preferential", "factual")
 STYLE = {
-    "font.family": "DejaVu Sans", "font.size": 12, "axes.titlesize": 16,
-    "axes.labelsize": 12, "xtick.labelsize": 11, "ytick.labelsize": 11,
-    "legend.fontsize": 11, "text.color": BLACK, "axes.labelcolor": BLACK,
+    "font.family": "DejaVu Sans", "font.size": 18, "axes.titlesize": 24,
+    "axes.labelsize": 18, "xtick.labelsize": 16, "ytick.labelsize": 16,
+    "legend.fontsize": 16, "text.color": BLACK, "axes.labelcolor": BLACK,
     "axes.spines.top": False, "axes.spines.right": False,
     "savefig.dpi": 200, "figure.facecolor": "white", "axes.facecolor": "white",
 }
@@ -107,7 +107,7 @@ def read_pairs(path, consume, *, sources=SOURCE_NAMES):
                     continue
                 consume(record)
     if ignored:
-        tqdm.write(f"{path}: excluded {ignored:,} pairs outside the AGH / old-HEEDB study.")
+        tqdm.write(f"{path}: excluded {ignored:,} pairs outside the AGH / HEEDB study.")
     if incomplete:
         tqdm.write(f"{path}: ignored the unfinished final record.")
     return incomplete
@@ -195,10 +195,10 @@ def save_figure(fig, output):
     plt.close(fig)
 
 
-def plot_rates(results, rows, values, *, title, denominator, output):
-    """Ordinary grouped bars; every percentage keeps its numerator and denominator."""
+def plot_rates(results, rows, values, *, title, output):
+    """Compare dataset percentages with grouped bars."""
     sources = list(results)
-    fig, ax = plt.subplots(figsize=(max(7, len(rows) * 2.3), 5.3))
+    fig, ax = plt.subplots(figsize=(max(9, len(rows) * 3.2), 6.5))
     width = 0.68 / len(sources)
     single_rate = len(rows) == 1
     for index, source in enumerate(sources):
@@ -208,15 +208,13 @@ def plot_rates(results, rows, values, *, title, denominator, output):
             rate = 100 * n / d if d else 0
             ax.bar(x, rate, 0.55 if single_rate else width * 0.9, color=SOURCE_COLORS[source], edgecolor="white",
                    label=SOURCE_NAMES[source] if position == 0 else None)
-            ax.text(x, rate + 2, percentage(n, d), ha="center", va="bottom", fontweight="bold")
-            ax.text(x, rate + 8, f"{n:,} / {d:,}", ha="center", va="bottom", fontsize=9, color=GRAY)
+            ax.text(x, rate + 2, percentage(n, d), ha="center", va="bottom", fontsize=20, fontweight="bold")
     tick_labels = [SOURCE_NAMES[source] for source in sources] if single_rate else [fill(label, 23) for _, label in rows]
-    ax.set(ylim=(0, 118), ylabel="Report pairs (%)", xticks=range(len(tick_labels)), xticklabels=tick_labels,
+    ax.set(ylim=(0, 115), ylabel="Report pairs (%)", xticks=range(len(tick_labels)), xticklabels=tick_labels,
            xlim=(-0.65, len(tick_labels) - 0.35))
     ax.set_yticks(range(0, 101, 20))
     ax.yaxis.set_major_formatter(PercentFormatter())
-    ax.set_title(title, loc="left", fontweight="bold", pad=42)
-    ax.text(0, 1.04, fill(denominator, 100), transform=ax.transAxes, fontsize=10, color=GRAY, va="bottom")
+    ax.set_title(title, loc="left", fontweight="bold", pad=20)
     if len(sources) > 1 and not single_rate:
         ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=len(sources))
     elif not single_rate:
@@ -225,9 +223,9 @@ def plot_rates(results, rows, values, *, title, denominator, output):
     save_figure(fig, output)
 
 
-def plot_distribution(results, rows, denominator, *, title, note, output):
+def plot_distribution(results, rows, denominator, *, title, output):
     """A 100% stack per dataset; the same label always has the same color."""
-    fig, ax = plt.subplots(figsize=(max(7, 3 * len(results)), 5.4))
+    fig, ax = plt.subplots(figsize=(max(9, 4 * len(results)), 6.5))
     for position, (source, metrics) in enumerate(results.items()):
         total = metrics[denominator]
         bottom = 0
@@ -236,18 +234,17 @@ def plot_distribution(results, rows, denominator, *, title, note, output):
             height = 100 * count / total if total else 0
             ax.bar(position, height, 0.58, bottom=bottom, color=color,
                    edgecolor="white", linewidth=1.1)
-            if height >= 8:
+            if height >= 10:
                 ax.text(position, bottom + height / 2, percentage(count, total),
-                        ha="center", va="center", color="white", fontweight="bold")
+                        ha="center", va="center", color="white", fontsize=20, fontweight="bold")
             bottom += height
         ax.text(position, 103, f"n={total:,}" if total else "No eligible pairs",
-                ha="center", va="bottom", fontsize=11, color=GRAY)
+                ha="center", va="bottom", fontsize=18, color=GRAY)
     ax.set(ylim=(0, 112), ylabel="Report pairs (%)", xticks=range(len(results)),
            xticklabels=[SOURCE_NAMES[source] for source in results])
     ax.set_yticks(range(0, 101, 20))
     ax.yaxis.set_major_formatter(PercentFormatter())
-    ax.set_title(title, loc="left", fontweight="bold", pad=42)
-    ax.text(0, 1.04, fill(note, 100), transform=ax.transAxes, fontsize=10, color=GRAY, va="bottom")
+    ax.set_title(title, loc="left", fontweight="bold", pad=20)
     ax.legend(handles=[Patch(facecolor=color, label=label) for _, label, color, _ in rows],
               loc="upper center", bbox_to_anchor=(0.5, -0.15),
               ncol=min(2, len(rows)), frameon=False)
@@ -259,35 +256,34 @@ def main_plots(results, output):
     jobs = [partial(
         plot_rates, results, [("edited", "Any physician edit")],
         lambda metrics, _: (metrics["edited_reports"], metrics["included_reports"]),
-        title="Physician edit rate", denominator="All included report pairs; any statement added or deleted.",
+        title="Physician edit rate",
         output=output / "01_edit_rate.png",
     ), partial(
         plot_distribution, results,
         [(key, label, color, "report_counts") for (key, label), color in zip(
             CHANGE_NAMES.items(), (GRAY, LIGHT_RED, DARK_RED, BLACK))],
-        "included_reports", title="Types of report changes", note="All included report pairs.",
+        "included_reports", title="Types of report changes",
         output=output / "02_change_types.png",
     ), partial(
         plot_rates, results, list(INPUT_NAMES.items()),
         lambda metrics, key: (metrics["input_status_counts"][key], metrics["input_reports"]),
-        title="Input quality", denominator="All saved input pairs, before exclusions; issues do not overlap.",
+        title="Input quality",
         output=output / "03_input_quality.png",
     ), partial(
         plot_distribution, results,
         [(key, key.title(), CATEGORY_COLORS[key], "category_counts") for key in CATEGORIES],
         "classified_reports", title="LLM edit categories",
-        note="Classified changed pairs. Factual = clinical meaning changed; correction is not verified.",
         output=output / "04_category_rates.png",
     ), partial(
         plot_distribution, results,
         [(key, key.title(), color, "status_counts") for key, color in zip(
             STATUSES, (BLACK, GRAY, RED, LIGHT_RED))],
-        "input_reports", title="Processing outcomes", note="All saved input pairs; unchanged pairs need no LLM call.",
+        "input_reports", title="Processing outcomes",
         output=output / "05_processing_status.png",
     ), partial(
         plot_rates, results, [("classified_reports", "Successfully classified"), ("skipped_reports", "Skipped")],
         lambda metrics, key: (metrics[key], metrics["edited_reports"]),
-        title="Classification coverage", denominator="All included changed pairs, including skipped pairs.",
+        title="Classification coverage",
         output=output / "06_classification_coverage.png",
     )]
     attempts = sorted({number for metrics in results.values() for number in metrics["attempt_counts"]})
@@ -295,7 +291,7 @@ def main_plots(results, output):
         jobs.append(partial(
             plot_rates, results, [(number, f"{number} attempt{'s' if number != 1 else ''}") for number in attempts],
             lambda metrics, key: (metrics["attempt_counts"].get(key, 0), metrics["edited_reports"]),
-            title="LLM attempts per changed pair", denominator="All included changed pairs, including skipped pairs.",
+            title="LLM classification attempts",
             output=output / "07_attempts.png",
         ))
     return jobs
@@ -311,27 +307,20 @@ def _plot_llm(results, output):
 def plot_statements(groups, labels, statements, output, category=""):
     sources = [source for source in SOURCE_NAMES if source in groups]
     comparisons = list(combinations(labels, 2))
-    row_height = 0.58 * len(labels) + 0.24 * len(comparisons) + 0.25
-    label_width, column_width = 3.3, 4.6
+    row_height = 0.8 * len(labels) + 0.5 * len(comparisons) + 0.35
+    label_width = 6 if comparisons else 4.8
+    column_width = 7
     width = label_width + column_width * len(sources) + 0.4
-    note = ("Exact added/deleted statements, ignoring case. Bars use preferential/factual pairs only; "
-            "other or missing labels are excluded. Labels describe whole report pairs; groups overlap.")
-    if comparisons:
-        note += " Agreement includes uncertain labels and excludes missing labels. Annotation sample only."
-    note = fill(note, int(width * 12))
-    footer = 0.45 + 0.15 * (note.count("\n") + 1)
-    height = 1.45 + row_height * len(statements) + footer
+    height = 1.9 + row_height * len(statements) + 0.6
     fig, axes = plt.subplots(len(statements), len(sources), figsize=(width, height), squeeze=False)
-    fig.subplots_adjust(left=label_width / width, right=1 - 0.9 / width,
-                        top=1 - 1.45 / height, bottom=footer / height, wspace=0.5, hspace=0.22)
-    title = "Annotation categories and agreement" if comparisons else "LLM edit categories by statement"
-    fig.text(0.25 / width, 1 - 0.2 / height, title, fontsize=17, fontweight="bold", va="top")
-    if category:
-        fig.text(0.25 / width, 1 - 0.55 / height, category, fontsize=12, color=GRAY, va="top")
+    fig.subplots_adjust(left=label_width / width, right=1 - 1.5 / width,
+                        top=1 - 1.9 / height, bottom=0.6 / height, wspace=0.9, hspace=0.25)
+    title = category or ("Annotation categories and agreement" if comparisons else "LLM edit categories by statement")
+    fig.text(0.25 / width, 1 - 0.2 / height, title, fontsize=24, fontweight="bold", va="top")
     fig.legend(handles=[Patch(color=CATEGORY_COLORS[key], label=key.title()) for key in STATEMENT_CATEGORIES],
-               loc="upper left", bbox_to_anchor=(0.15 / width, 1 - 0.8 / height), ncol=2, frameon=False)
+               loc="upper left", bbox_to_anchor=(0.15 / width, 1 - 0.75 / height), ncol=2, frameon=False)
     for column, source in enumerate(sources):
-        axes[0, column].set_title(SOURCE_NAMES[source], loc="left", fontsize=12, fontweight="bold", pad=17)
+        axes[0, column].set_title(SOURCE_NAMES[source], loc="left", fontsize=20, fontweight="bold", pad=20)
         for row, statement in enumerate(statements):
             ax = axes[row, column]
             current = groups[source].get(statement, StatementCounts())
@@ -339,12 +328,12 @@ def plot_statements(groups, labels, statements, output, category=""):
             ax.set_xticks((0, 50, 100))
             ax.xaxis.set_major_formatter(PercentFormatter())
             ax.set_yticks([])
-            ax.tick_params(axis="x", labelsize=8, labelbottom=row == len(statements) - 1)
+            ax.tick_params(axis="x", labelbottom=row == len(statements) - 1)
             clean_ax(ax, "x")
             ax.spines[["left", "bottom"]].set_visible(False)
             if column == 0:
                 fig.text(0.25 / width, (ax.get_position().y0 + ax.get_position().y1) / 2,
-                         fill(statement, 30), fontsize=11, va="center")
+                         fill(statement, 27), fontsize=18, va="center")
             for y, (name, key) in enumerate(labels.items()):
                 counts = current.labels[key]
                 total = sum(counts[category] for category in STATEMENT_CATEGORIES)
@@ -352,22 +341,19 @@ def plot_statements(groups, labels, statements, output, category=""):
                 for label in STATEMENT_CATEGORIES:
                     percent = 100 * counts[label] / total if total else 0
                     ax.barh(y, percent, left=left, height=0.5, color=CATEGORY_COLORS[label], edgecolor="white")
-                    if percent >= 12:
+                    if percent >= 15:
                         ax.text(left + percent / 2, y, f"{percent:.0f}%", ha="center", va="center",
-                                color="white", fontsize=10, fontweight="bold")
+                                color="white", fontsize=20, fontweight="bold")
                     left += percent
                 if len(labels) > 1:
-                    ax.text(-0.03, y, name, transform=ax.get_yaxis_transform(), ha="right", va="center", fontsize=8)
-                excluded = current.total - total
-                detail = f"n={total:,}" + (f"\n{excluded:,} excluded" if excluded else "")
-                ax.text(1.03, y, detail, transform=ax.get_yaxis_transform(), va="center", fontsize=8, color=GRAY)
+                    ax.text(-0.03, y, name, transform=ax.get_yaxis_transform(), ha="right", va="center", fontsize=16)
+                ax.text(1.03, y, f"n={total:,}", transform=ax.get_yaxis_transform(), va="center", fontsize=16, color=GRAY)
                 if not total:
-                    ax.text(1, y, "No eligible edits", va="center", fontsize=9, color=GRAY)
+                    ax.text(50, y, "N/A", ha="center", va="center", fontsize=18, color=GRAY)
             for index, comparison in enumerate(comparisons):
                 n, d = current.agreements.get(comparison, (0, 0))
-                detail = f"{' / '.join(comparison)}: {n:,}/{d:,} ({percentage(n, d)})"
-                ax.text(0, len(labels) - 0.25 + 0.5 * index, detail, fontsize=8, color=GRAY, va="center")
-    fig.text(0.25 / width, 0.15 / height, note, fontsize=9, color=GRAY, va="bottom")
+                detail = f"{' / '.join(comparison)}: {percentage(n, d)}"
+                ax.text(0, len(labels) - 0.25 + 0.5 * index, detail, fontsize=16, color=GRAY, va="center")
     save_figure(fig, output)
 
 
@@ -428,12 +414,12 @@ def export_run(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     inputs = parser.add_mutually_exclusive_group()
-    inputs.add_argument("--config", type=Path, help="Existing llm_edits YAML; use plots.run_id.")
+    inputs.add_argument("--config", type=Path, nargs="+", help="LLM-edit YAMLs; use each plots.run_id.")
     inputs.add_argument("--runs", type=Path, nargs="+", help="Saved run directories.")
     inputs.add_argument("--pairs", type=Path, nargs="+", help="Saved pairs.jsonl files; read each once.")
     parser.add_argument("--annotations", type=Path, nargs="+", help="Analysis JSONs in annotator order.")
     parser.add_argument("--statements", nargs="+", help="Exact statements, ignoring case; otherwise use terms.py categories.")
-    parser.add_argument("--output", type=Path, help="Figure directory; defaults to figures beside the first input.")
+    parser.add_argument("--output", type=Path, help="Figure directory; defaults to figures beside the first input; combined plots go in combined/.")
     parser.add_argument("--examples", type=int, default=0, help="Printed examples per statement/category (default: 0).")
     args = parser.parse_args()
     if not (args.config or args.runs or args.pairs or args.annotations):
@@ -448,11 +434,11 @@ def main():
         selections = {"": statements}
     statements = {statement for terms in selections.values() for statement in terms}
     paths = args.pairs or [root / "pairs.jsonl" for root in args.runs or []]
-    if args.config:
-        cfg = load_config(args.config)
+    for config in args.config or []:
+        cfg = load_config(config)
         if cfg["experiment"] != "llm_edits":
             parser.error("These plots require experiment: llm_edits.")
-        paths = [Path(cfg["save_path"]) / "llm_edits" / cfg["data_name"] / cfg["plots"]["run_id"] / "pairs.jsonl"]
+        paths.append(Path(cfg["save_path"]) / "llm_edits" / cfg["data_name"] / cfg["plots"]["run_id"] / "pairs.jsonl")
     if len({path.resolve() for path in paths}) != len(paths):
         parser.error("Input paths must be distinct.")
     output = args.output or (paths or args.annotations)[0].parent / "figures"
@@ -479,7 +465,7 @@ def main():
             count_statements(record, annotation_groups, annotation_labels, statements)
         jobs.extend(statement_plots(annotation_groups, annotation_labels, selections, output / "annotations"))
     if not jobs:
-        parser.error("No AGH or old-HEEDB pairs found.")
+        parser.error("No AGH or HEEDB pairs found.")
     with plt.rc_context(STYLE):
         for job in tqdm(jobs, desc="Plotting figures", unit="figure"):
             job()
