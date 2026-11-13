@@ -309,12 +309,12 @@ def plot_statements(groups, labels, statements, output, category=""):
     comparisons = list(combinations(labels, 2))
     row_height = 0.8 * len(labels) + 0.5 * len(comparisons) + 0.35
     label_width = 6 if comparisons else 4.8
-    column_width = 7
+    column_width = 8
     width = label_width + column_width * len(sources) + 0.4
     height = 1.9 + row_height * len(statements) + 0.6
     fig, axes = plt.subplots(len(statements), len(sources), figsize=(width, height), squeeze=False)
-    fig.subplots_adjust(left=label_width / width, right=1 - 1.5 / width,
-                        top=1 - 1.9 / height, bottom=0.6 / height, wspace=0.9, hspace=0.25)
+    fig.subplots_adjust(left=label_width / width, right=1 - 2.5 / width,
+                        top=1 - 1.9 / height, bottom=0.6 / height, wspace=1, hspace=0.25)
     title = category or ("Annotation categories and agreement" if comparisons else "LLM edit categories by statement")
     fig.text(0.25 / width, 1 - 0.2 / height, title, fontsize=24, fontweight="bold", va="top")
     fig.legend(handles=[Patch(color=CATEGORY_COLORS[key], label=key.title()) for key in STATEMENT_CATEGORIES],
@@ -342,12 +342,17 @@ def plot_statements(groups, labels, statements, output, category=""):
                     percent = 100 * counts[label] / total if total else 0
                     ax.barh(y, percent, left=left, height=0.5, color=CATEGORY_COLORS[label], edgecolor="white")
                     if percent >= 15:
-                        ax.text(left + percent / 2, y, f"{percent:.0f}%", ha="center", va="center",
-                                color="white", fontsize=20, fontweight="bold")
+                        text = ax.text(left + percent / 2, y, f"{percent:.2f}%", ha="center", va="center",
+                                       color="white", fontsize=20, fontweight="bold")
+                        text_width = text.get_window_extent().width
+                        bar_width = ax.get_window_extent().width * percent / 100
+                        text.set_fontsize(text.get_fontsize() * min(1, 0.9 * bar_width / text_width))
                     left += percent
                 if len(labels) > 1:
                     ax.text(-0.03, y, name, transform=ax.get_yaxis_transform(), ha="right", va="center", fontsize=16)
-                ax.text(1.03, y, f"n={total:,}", transform=ax.get_yaxis_transform(), va="center", fontsize=16, color=GRAY)
+                detail = (f"n={total:,}\nPreferential: {counts['preferential']:,}"
+                          f"\nFactual: {counts['factual']:,}")
+                ax.text(1.03, y, detail, transform=ax.get_yaxis_transform(), va="center", fontsize=16, color=GRAY)
                 if not total:
                     ax.text(50, y, "N/A", ha="center", va="center", fontsize=18, color=GRAY)
             for index, comparison in enumerate(comparisons):
