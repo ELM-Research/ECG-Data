@@ -229,6 +229,7 @@ def plot_distribution(results, rows, denominator, *, title, output):
     for position, (source, metrics) in enumerate(results.items()):
         total = metrics[denominator]
         bottom = 0
+        small = []
         for key, label, color, field in rows:
             count = metrics[field].get(key, 0)
             height = 100 * count / total if total else 0
@@ -237,7 +238,21 @@ def plot_distribution(results, rows, denominator, *, title, output):
             if height >= 10:
                 ax.text(position, bottom + height / 2, percentage(count, total),
                         ha="center", va="center", color="white", fontsize=20, fontweight="bold")
+            elif count:
+                small.append((count, color, bottom + height / 2))
             bottom += height
+        # Keep small nonzero segments proportional; label them beside the bar.
+        label_heights = []
+        for _, _, center in small:
+            label_heights.append(max(center, label_heights[-1] + 10 if label_heights else 10))
+        ceiling = 90
+        for (count, color, center), label_height in reversed(list(zip(small, label_heights))):
+            label_height = min(label_height, ceiling)
+            ax.annotate(f"{percentage(count, total)}\n(n={count:,})",
+                        xy=(position + 0.29, center), xytext=(position + 0.38, label_height),
+                        ha="left", va="center", color=color, fontsize=14, fontweight="bold",
+                        arrowprops={"arrowstyle": "-", "color": color, "linewidth": 1.5})
+            ceiling = label_height - 10
         ax.text(position, 103, f"n={total:,}" if total else "No eligible pairs",
                 ha="center", va="bottom", fontsize=18, color=GRAY)
     ax.set(ylim=(0, 112), ylabel="Report pairs (%)", xticks=range(len(results)),
