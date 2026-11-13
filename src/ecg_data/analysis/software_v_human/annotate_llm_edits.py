@@ -1,4 +1,4 @@
-"""Export a random sample of saved LLM classifications for offline annotation."""
+"""Export a term-balanced sample of saved LLM classifications for offline annotation."""
 
 import base64
 import hashlib
@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 
 from ecg_data.analysis.software_v_human.llm_edits import _count, _pair_id, summarize
 from ecg_data.analysis.software_v_human.plot_llm_edits import _plot_llm, _snapshot, _write_page
+from ecg_data.analysis.software_v_human.terms import TERMS
 from ecg_data.preprocess.config.load import get_config
 
 
@@ -20,6 +21,42 @@ def _balanced_sizes(counts, sample_size, rng):
         index = rng.choices(range(len(counts)), weights=remaining)[0]
         sizes[index] += 1
     return sizes
+
+
+def _sample_terms(records, group, sizes, rng):
+    pools = {term: [[], []] for terms in TERMS.values() for term in terms}
+    for category, indices in enumerate(group):
+        for index in indices:
+            changed = {term.lower() for key in ("added", "deleted") for term in records[index].get(key) or []}
+            for term in changed & pools.keys():
+                pools[term][category].append(index)
+    for buckets in pools.values():
+        for bucket in buckets:
+            rng.shuffle(bucket)
+
+    # Exhaust terms with both labels before using terms with only one.
+    tiers = ([buckets for buckets in pools.values() if all(buckets)],
+             [buckets for buckets in pools.values() if not all(buckets)])
+    selected = set()
+    remaining = sizes.copy()
+    for tier in tiers:
+        while any(remaining):
+            before = len(selected)
+            rng.shuffle(tier)
+            for buckets in tier:
+                for category, bucket in enumerate(buckets):
+                    while bucket and bucket[-1] in selected:
+                        bucket.pop()
+                    if remaining[category] and bucket:
+                        selected.add(bucket.pop())
+                        remaining[category] -= 1
+            if len(selected) == before:
+                break
+
+    # Preserve the requested balance if the listed terms run out.
+    for category, count in zip(group, remaining):
+        selected.update(rng.sample([index for index in category if index not in selected], count))
+    return selected
 
 
 def export_annotations(root, *, sample_size=200, seed=0, extra_roots=()):
@@ -62,8 +99,7 @@ def export_annotations(root, *, sample_size=200, seed=0, extra_roots=()):
     indices = set()
     for group, size in zip(groups, sizes):
         category_sizes = _balanced_sizes([len(category) for category in group], size, rng)
-        for category, count in zip(group, category_sizes):
-            indices.update(rng.sample(category, count))
+        indices.update(_sample_terms(eligible, group, category_sizes, rng))
     snapshot["pairs"] = [record for index, record in enumerate(eligible) if index in indices]
     identity = json.dumps({"run": snapshot["run"], "pairs": snapshot["pairs"]},
                           sort_keys=True, allow_nan=False).encode()
@@ -74,7 +110,8 @@ def export_annotations(root, *, sample_size=200, seed=0, extra_roots=()):
         "source_jsonl": str((root / "pairs.jsonl").resolve()),
         "source_jsonls": [str((path / "pairs.jsonl").resolve()) for path in roots],
         "cohort": "Successfully classified preferential or factual changed pairs",
-        "method": "Random sample without replacement, balanced by dataset and by preferential/factual within each dataset",
+        "method": ("Random sample without replacement, balanced by dataset and by preferential/factual within each dataset; "
+                   "round-robin over changed terms, prioritizing terms with both categories"),
         "requested_size": sample_size, "sample_size": len(snapshot["pairs"]),
         "eligible_pairs": len(eligible), "seed": seed,
         "display_order": display_order,
