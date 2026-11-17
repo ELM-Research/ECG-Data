@@ -18,6 +18,7 @@ from tqdm import tqdm
 
 from ecg_data.analysis.software_v_human import edits
 from ecg_data.analysis.software_v_human.reports import normalize_report, read_reports, report_files
+from ecg_data.analysis.software_v_human.terms import TERMS
 
 ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 CATEGORIES = ("preferential", "factual", "uncertain")
@@ -25,6 +26,12 @@ STATUSES = ("excluded", "unchanged", "classified", "skipped")
 SOURCES = {"agh": ("agh",), "heedb": ("heedb_old",)}
 PROMPT_PATH = Path(__file__).parents[1] / "config/prompts/edits_task.txt"
 INPUT_NORMALIZATION = {**edits.NORMALIZATION, "order": "preserve"}
+TERM_METRICS = {
+    "sensitivity": ("retained", ("retained", "added")),
+    "specificity": ("absent_from_both", ("deleted", "absent_from_both")),
+    "ppv": ("retained", ("retained", "deleted")),
+    "npv": ("absent_from_both", ("added", "absent_from_both")),
+}
 
 
 def _unique_object(items):
@@ -215,12 +222,14 @@ def _analyze_batch(items, *, empty_reports, classify, truncate=(), remove=(), sk
 def _count(counts, record):
     source = record["source"]
     if source not in counts:
-        counts[source] = {key: Counter() for key in ("inputs", "statuses", "changes", "categories", "attempts")}
+        counts[source] = {key: Counter() for key in ("inputs", "statuses", "changes", "categories", "attempts", *edits.STATEMENTS)}
     current = counts[source]
     current["inputs"][record["input_status"]] += 1
     current["statuses"][record["status"]] += 1
     if record["change"] is not None:
         current["changes"][record["change"]] += 1
+        for name in edits.STATEMENTS:
+            current[name].update(record[name])
     if record["category"] is not None:
         current["categories"][record["category"]] += 1
     if record["attempts"]:
@@ -228,17 +237,41 @@ def _count(counts, record):
 
 
 def summarize(counts, *, empty_reports, undefined_ratio, truncate=(), remove=(), skip=()):
-    """Category rates use classified changed pairs; failed calls never become labels."""
+    """Literal metrics use all included pairs; category rates use classified changed pairs."""
     def ratio(numerator, denominator):
         return numerator / denominator if denominator else undefined_ratio
 
     results = {}
+    vocabulary = sorted({term for terms in TERMS.values() for term in terms} | {
+        term for current in counts.values() for name in edits.STATEMENTS for term in current[name]
+    })
     for source, current in counts.items():
         total = sum(current["inputs"].values())
         statuses = current["statuses"]
         included = total - statuses["excluded"]
         changed = included - statuses["unchanged"]
         classified = statuses["classified"]
+        terms = {}
+        for term in vocabulary:
+            retained, added, deleted = (current[name][term] for name in edits.STATEMENTS)
+            software = retained + deleted
+            physician = retained + added
+            mentioned = retained + added + deleted
+            values = {
+                "retained": retained, "added": added, "deleted": deleted,
+                "absent_from_both": included - mentioned,
+                "software_report_count": software,
+                "software_absent_report_count": included - software,
+                "physician_report_count": physician,
+                "mentioned_report_count": mentioned,
+                "edited_report_count": added + deleted,
+                "disagreement_rate": ratio(added + deleted, mentioned),
+                "added_report_ratio": ratio(added, included - software),
+                "deleted_report_ratio": ratio(deleted, software),
+            }
+            for name, (numerator, denominator) in TERM_METRICS.items():
+                values[name] = ratio(values[numerator], sum(values[key] for key in denominator))
+            terms[term] = values
         results[source] = {
             "study": "llm_edits", "normalization": edits.NORMALIZATION,
             "llm_input_normalization": INPUT_NORMALIZATION,
@@ -250,6 +283,8 @@ def summarize(counts, *, empty_reports, undefined_ratio, truncate=(), remove=(),
             "input_status_counts": {key: current["inputs"][key] for key in edits.INPUTS},
             "status_counts": {key: statuses[key] for key in STATUSES},
             "report_counts": {key: current["changes"][key] for key in edits.CHANGES},
+            "report_rates": {key: ratio(current["changes"][key], included) for key in edits.CHANGES},
+            "terms": terms,
             "edited_reports": changed, "edit_rate": ratio(changed, included),
             "classified_reports": classified, "skipped_reports": statuses["skipped"],
             "classification_coverage": ratio(classified, changed),

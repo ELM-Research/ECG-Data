@@ -1,4 +1,4 @@
-"""Plot LLM report edits and statement groups in one pass over saved pairs."""
+"""Plot report changes, LLM categories, and literal term metrics from saved pairs."""
 
 import argparse
 import json
@@ -19,7 +19,7 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
 from tqdm import tqdm
 
-from ecg_data.analysis.software_v_human.llm_edits import CATEGORIES, SOURCES, STATUSES, _count, summarize
+from ecg_data.analysis.software_v_human.llm_edits import CATEGORIES, SOURCES, STATUSES, TERM_METRICS, _count, summarize
 from ecg_data.analysis.software_v_human.terms import TERMS
 from ecg_data.preprocess.config.load import load_config
 
@@ -37,6 +37,12 @@ LIGHT_RED, GRID = "#EA4238", "#E8E8E8"
 CATEGORY_COLORS = {"preferential": DARK_RED, "factual": LIGHT_RED, "uncertain": GRAY}
 SOURCE_COLORS = {"agh": RED, "heedb_old": GRAY}
 STATEMENT_CATEGORIES = ("preferential", "factual")
+METRIC_LABELS = {
+    "sensitivity": ("Sensitivity", "Present in both / present in physician report"),
+    "specificity": ("Specificity", "Absent from both / absent from physician report"),
+    "ppv": ("Positive predictive value (PPV)", "Present in both / present in software report"),
+    "npv": ("Negative predictive value (NPV)", "Absent from both / absent from software report"),
+}
 STYLE = {
     "font.family": "DejaVu Sans", "font.size": 18, "axes.titlesize": 24,
     "axes.labelsize": 18, "xtick.labelsize": 16, "ytick.labelsize": 16,
@@ -223,10 +229,12 @@ def plot_rates(results, rows, values, *, title, output):
     save_figure(fig, output)
 
 
-def plot_distribution(results, rows, denominator, *, title, output):
+def plot_distribution(results, rows, denominator, *, title, output, spacing=1):
     """A 100% stack per dataset; the same label always has the same color."""
-    fig, ax = plt.subplots(figsize=(max(9, 4 * len(results)), 6.5))
-    for position, (source, metrics) in enumerate(results.items()):
+    width = max(9, 4 * len(results)) + 4 * (spacing - 1) * (len(results) - 1)
+    fig, ax = plt.subplots(figsize=(width, 6.5))
+    positions = [index * spacing for index in range(len(results))]
+    for position, (source, metrics) in zip(positions, results.items()):
         total = metrics[denominator]
         bottom = 0
         small = []
@@ -255,7 +263,7 @@ def plot_distribution(results, rows, denominator, *, title, output):
             ceiling = label_height - 10
         ax.text(position, 103, f"n={total:,}" if total else "No eligible pairs",
                 ha="center", va="bottom", fontsize=18, color=GRAY)
-    ax.set(ylim=(0, 112), ylabel="Report pairs (%)", xticks=range(len(results)),
+    ax.set(ylim=(0, 112), ylabel="Report pairs (%)", xticks=positions,
            xticklabels=[SOURCE_NAMES[source] for source in results])
     ax.set_yticks(range(0, 101, 20))
     ax.yaxis.set_major_formatter(PercentFormatter())
@@ -279,6 +287,7 @@ def main_plots(results, output):
             CHANGE_NAMES.items(), (GRAY, LIGHT_RED, DARK_RED, BLACK))],
         "included_reports", title="Types of report changes",
         output=output / "02_change_types.png",
+        spacing=1.25 if len(results) > 1 else 1,
     ), partial(
         plot_rates, results, list(INPUT_NAMES.items()),
         lambda metrics, key: (metrics["input_status_counts"][key], metrics["input_reports"]),
@@ -387,6 +396,55 @@ def statement_plots(groups, labels, selections, output):
     return jobs
 
 
+def plot_term_metrics(results, statements, metric, output, category=""):
+    """Compare exact statement presence across all included report pairs."""
+    title, definition = METRIC_LABELS[metric]
+    label_width, column_width = 5, 6.5
+    width = label_width + column_width * len(results) + 0.4
+    title = fill(f"{category} — {title}" if category else title, int(width * 4))
+    header = 1.9 + 0.4 * title.count("\n")
+    height = header + 0.9 * len(statements) + 0.6
+    fig, axes = plt.subplots(1, len(results), figsize=(width, height), squeeze=False)
+    fig.subplots_adjust(left=label_width / width, right=1 - 1.9 / width,
+                        top=1 - header / height, bottom=0.6 / height, wspace=0.8)
+    fig.text(0.25 / width, 1 - 0.2 / height, title, fontsize=24, fontweight="bold", va="top")
+    fig.text(0.25 / width, 1 - (header - 1.15) / height,
+             f"{definition}\nExact statements · all included report pairs",
+             fontsize=16, color=GRAY, va="top")
+    numerator, denominator = TERM_METRICS[metric]
+    for column, (source, metrics) in enumerate(results.items()):
+        ax = axes[0, column]
+        ax.set_title(SOURCE_NAMES[source], loc="left", fontsize=20, fontweight="bold", pad=20)
+        ax.set(xlim=(0, 100), ylim=(len(statements) - 0.5, -0.5), yticks=[])
+        ax.set_xticks((0, 50, 100))
+        ax.xaxis.set_major_formatter(PercentFormatter())
+        clean_ax(ax, "x")
+        ax.spines[["left", "bottom"]].set_visible(False)
+        for row, statement in enumerate(statements):
+            values = metrics["terms"].get(statement, {
+                "retained": 0, "added": 0, "deleted": 0,
+                "absent_from_both": metrics["included_reports"],
+            })
+            n, d = values[numerator], sum(values[key] for key in denominator)
+            ax.barh(row, 100 * n / d if d else 0, height=0.5, color=SOURCE_COLORS[source])
+            ax.text(1.03, row, f"{percentage(n, d)}\n{n:,} / {d:,}",
+                    transform=ax.get_yaxis_transform(), va="center", fontsize=16, color=GRAY)
+            if column == 0:
+                ax.text(-0.05, row, fill(statement, 27), transform=ax.get_yaxis_transform(),
+                        ha="right", va="center", fontsize=18)
+    save_figure(fig, output)
+
+
+def term_plots(results, selections, output):
+    jobs = []
+    for category, statements in selections.items():
+        slug = category.lower().replace(" / ", "_").replace(" ", "_") or "selected_statements"
+        for metric in TERM_METRICS:
+            jobs.append(partial(plot_term_metrics, results, statements, metric,
+                                output / slug / f"{metric}.png", category))
+    return jobs
+
+
 def print_examples(groups):
     for source, statements in groups.items():
         for statement, current in statements.items():
@@ -409,7 +467,7 @@ def _write_page(snapshot, page, annotation_script=""):
 
 
 def export_run(root):
-    """Export the existing HTML browser plus both sets of figures."""
+    """Export the HTML browser and figures from saved pairs."""
     root = Path(root)
     groups = {}
     labels = {"LLM": "category"}
@@ -421,6 +479,7 @@ def export_run(root):
     for source, metrics in snapshot["summary"].items():
         output = root / "figures" / source
         jobs.extend(main_plots({source: metrics}, output))
+        jobs.extend(term_plots({source: metrics}, TERMS, output / "term_metrics"))
         jobs.extend(statement_plots({source: groups[source]}, labels, TERMS, output / "statements"))
     with plt.rc_context(STYLE):
         for job in tqdm(jobs, desc="Plotting figures", unit="figure"):
@@ -475,8 +534,10 @@ def main():
         results = summarize(counts, empty_reports="saved pairs", undefined_ratio=None)
         for source, metrics in results.items():
             jobs.extend(main_plots({source: metrics}, output / source))
+            jobs.extend(term_plots({source: metrics}, selections, output / source / "term_metrics"))
         if len(results) > 1:
             jobs.extend(main_plots(results, output / "combined"))
+            jobs.extend(term_plots(results, selections, output / "combined" / "term_metrics"))
         jobs.extend(statement_plots(groups, labels, selections, output / "statements"))
     if args.annotations:
         records, annotation_labels = load_annotations(args.annotations)
@@ -491,7 +552,7 @@ def main():
             job()
     for root, snapshot in snapshots:
         snapshot["figures"] = {
-            source: [relpath(path, root) for path in sorted((output / source).glob("*.png"))]
+            source: [relpath(path, root) for path in sorted((output / source).rglob("*.png"))]
             for source in snapshot["summary"]
         }
         _write_page(snapshot, root / "index.html")

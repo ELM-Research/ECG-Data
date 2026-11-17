@@ -6,11 +6,11 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from ecg_data.analysis.software_v_human import edits, llm_edits, ouyang
+from ecg_data.analysis.software_v_human import llm_edits, ouyang
 from ecg_data.analysis.software_v_human.reports import read_reports, report_files
 from ecg_data.preprocess.config.load import get_config
 
-EXPERIMENTS = {"ouyang": ouyang, "edits": edits}
+EXPERIMENTS = {"ouyang": ouyang}
 
 
 def _batches(paths, size):
