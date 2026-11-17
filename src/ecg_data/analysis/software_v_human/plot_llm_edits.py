@@ -1,11 +1,13 @@
-"""Plot report changes, LLM categories, and literal term metrics from saved pairs."""
+"""Plot report changes, LLM categories, literal term metrics, and time trends from saved pairs."""
 
 import argparse
 import json
-from collections import Counter, defaultdict
+import re
+from collections import Counter, defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from functools import partial
+from functools import lru_cache, partial
 from itertools import combinations
 from os.path import relpath
 from pathlib import Path
@@ -15,8 +17,12 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
 from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
+from scipy import stats
 from tqdm import tqdm
 
 from ecg_data.analysis.software_v_human.llm_edits import CATEGORIES, SOURCES, STATUSES, TERM_METRICS, _count, summarize
@@ -52,9 +58,14 @@ STYLE = {
 }
 
 
+HEED_ROOT = Path("/p01/whan/data/HEED")  # Metadata location in the reference analysis.
+MIN_N = 5
+DAYS_PER_YEAR = 365.25
+
+
+
 @dataclass
 class StatementCounts:
-    total: int = 0
     labels: dict = field(default_factory=lambda: defaultdict(Counter))
     agreements: dict = field(default_factory=dict)
     examples: dict = field(default_factory=lambda: defaultdict(list))
@@ -71,7 +82,6 @@ def count_statements(record, groups, labels, statements, examples=0):
         if statement not in group:
             group[statement] = StatementCounts()
         current = group[statement]
-        current.total += 1
         for key in labels.values():
             current.labels[key][record.get(key)] += 1
         for first, second in combinations(labels, 2):
@@ -321,11 +331,15 @@ def main_plots(results, output):
     return jobs
 
 
+def plot_jobs(jobs, desc="Plotting figures"):
+    with plt.rc_context(STYLE):
+        for job in tqdm(jobs, desc=desc, unit="figure"):
+            job()
+
+
 def _plot_llm(results, output):
     """Keep the annotation export's plotting entry point."""
-    with plt.rc_context(STYLE):
-        for job in tqdm(main_plots(results, Path(output)), desc="Plotting main figures", unit="figure"):
-            job()
+    plot_jobs(main_plots(results, Path(output)), desc="Plotting main figures")
 
 
 def plot_statements(groups, labels, statements, output, category=""):
@@ -386,14 +400,15 @@ def plot_statements(groups, labels, statements, output, category=""):
     save_figure(fig, output)
 
 
+def category_slug(category):
+    return category.lower().replace(" / ", "_").replace(" ", "_") or "selected_statements"
+
+
 def statement_plots(groups, labels, selections, output):
     if not groups:
         return []
-    jobs = []
-    for category, statements in selections.items():
-        slug = category.lower().replace(" / ", "_").replace(" ", "_") or "selected_statements"
-        jobs.append(partial(plot_statements, groups, labels, statements, output / f"{slug}.png", category))
-    return jobs
+    return [partial(plot_statements, groups, labels, statements, output / f"{category_slug(category)}.png", category)
+            for category, statements in selections.items()]
 
 
 def plot_term_metrics(results, statements, metric, output, category=""):
@@ -433,13 +448,257 @@ def plot_term_metrics(results, statements, metric, output, category=""):
 
 
 def term_plots(results, selections, output):
-    jobs = []
+    return [partial(plot_term_metrics, results, statements, metric,
+                    output / category_slug(category) / f"{metric}.png", category)
+            for category, statements in selections.items() for metric in TERM_METRICS]
+
+
+def _quarter(value):
+    if not isinstance(value, (str, datetime, np.datetime64)):
+        return None
+    date = pd.to_datetime(value, format="ISO8601", errors="coerce")
+    if pd.isna(date):
+        return None
+    return datetime(date.year, 3 * ((date.month - 1) // 3) + 1, 1)
+
+
+@lru_cache(maxsize=1)
+def _agh_dates(path):
+    dates = pd.to_datetime([row.get("EditDate") for row in json.loads(path.read_text())],
+                           format="%m-%d-%Y", errors="coerce")
+    # The reference script excludes AGH dates from 2030 onward.
+    quarters = dates.where(dates < "2030-01-01").to_period("Q").to_timestamp()
+    return [None if pd.isna(date) else date.to_pydatetime() for date in quarters]
+
+
+def _heed_key(value):
+    """Match legacy records to institution metadata, retaining the WFDB relative path."""
+    parts = Path(value).parts
+    if "WFDB" in parts:
+        index = parts.index("WFDB")
+        return parts[index - 1], Path(*parts[index + 1:]).as_posix()
+    if "HEED" in parts:
+        index = parts.index("HEED")
+        return parts[index + 1], Path(*parts[index + 2:]).as_posix()
+    raise ValueError(f"Cannot identify the HEED institution in {value}")
+
+
+def _file_name(value):
+    return str(value).strip().removeprefix("./").removeprefix("/").removeprefix("WFDB/").removesuffix(".hea")
+
+
+def _heed_time(path):
+    instance = np.load(path, allow_pickle=True).item()
+    quarter = _quarter(instance.get("ECGAcquisitionTime"))
+    legacy = None
+    if quarter is None and instance.get("file_path"):
+        institution, name = _heed_key(instance["file_path"])
+        legacy = institution, _file_name(name)
+    return quarter, legacy
+
+
+def _metadata_dates(path, names):
+    ids = {Path(name).name for name in names}
+    dates, key = {}, None
+    with pd.read_csv(path, dtype=str, chunksize=100_000,
+                     usecols=lambda col: col in ("FileID", "FileName", "ECGAcquisitionTime")) as chunks:
+        for chunk in chunks:
+            key = "FileName" if "FileName" in chunk else "FileID"
+            if key not in chunk or "ECGAcquisitionTime" not in chunk:
+                raise ValueError(f"{path} requires FileName or FileID, and ECGAcquisitionTime.")
+            chunk[key] = chunk[key].map(_file_name)
+            matched = chunk[chunk[key].isin(names if key == "FileName" else ids)]
+            for name, date in matched[[key, "ECGAcquisitionTime"]].itertuples(index=False, name=None):
+                quarter = _quarter(date)
+                if name in dates and dates[name] != quarter:
+                    raise ValueError(f"Conflicting acquisition dates for {name} in {path}")
+                dates[name] = quarter
+    return {name: dates.get(name if key == "FileName" else Path(name).name) for name in names}
+
+
+class TimeCounts:
+    def __init__(self, statements, heed_root=HEED_ROOT, workers=8):
+        self.statements = set(statements)
+        self.heed_root = Path(heed_root)
+        self.counts = defaultdict(lambda: defaultdict(Counter))
+        self.coverage = defaultdict(Counter)
+        self.pending = defaultdict(list)
+        self.workers = workers
+        self.pool = ThreadPoolExecutor(max_workers=workers)
+        self.queue = deque()
+
+    def _add(self, source, quarter, changes):
+        self.coverage[source]["dated"] += 1
+        for term, edited in changes:
+            self.counts[source, term][quarter].update(n=1, edited=int(edited))
+
+    def count(self, record):
+        source = record["source"]
+        if source not in SOURCE_NAMES or record["change"] is None:
+            return
+        self.coverage[source]["included"] += 1
+        changed = {s.lower() for key in ("added", "deleted") for s in record[key]}
+        present = changed | {s.lower() for s in record["retained"]}
+        changes = [(None, record["change"] != "unchanged")]
+        changes.extend((term, term in changed) for term in present & self.statements)
+        path = Path(record["file"])
+        if not path.is_file():
+            self.coverage[source]["missing_source_file"] += 1
+            return
+        if source == "heedb_old":
+            self.queue.append((changes, self.pool.submit(_heed_time, path)))
+            if len(self.queue) >= self.workers:
+                self._collect()
+            return
+        dates = _agh_dates(path)
+        index = record["pair_index"]
+        if not 0 <= index < len(dates):
+            raise ValueError(f"AGH pair index {index} is outside {path}")
+        quarter = dates[index]
+        if quarter is None:
+            self.coverage[source]["invalid_or_missing_date"] += 1
+            return
+        self._add(source, quarter, changes)
+
+    def _collect(self):
+        changes, future = self.queue.popleft()
+        quarter, legacy = future.result()
+        if legacy is not None:
+            institution, name = legacy
+            self.pending[institution].append((name, changes))
+        elif quarter is None:
+            self.coverage["heedb_old"]["invalid_or_missing_date"] += 1
+        else:
+            self._add("heedb_old", quarter, changes)
+
+    def finish(self):
+        """Read each legacy institution CSV once, matching only requested ECGs."""
+        with self.pool:
+            while self.queue:
+                self._collect()
+        for institution, records in tqdm(self.pending.items(), desc="Reading HEEDB dates", unit="institution",
+                                         disable=not self.pending):
+            path = self.heed_root / institution / "metadata/metadata.csv"
+            if not path.is_file():
+                self.coverage["heedb_old"]["missing_metadata"] += len(records)
+                tqdm.write(f"Missing HEEDB metadata: {path}")
+                continue
+            dates = _metadata_dates(path, {name for name, _ in records})
+            for name, changes in records:
+                quarter = dates[name]
+                if quarter is None:
+                    self.coverage["heedb_old"]["unmatched_or_invalid_metadata_date"] += 1
+                    continue
+                self._add("heedb_old", quarter, changes)
+        self.pending.clear()
+        for source, counts in self.coverage.items():
+            exclusions = {key: n for key, n in counts.items() if key not in ("included", "dated")}
+            tqdm.write(f"{source} time coverage: {counts['dated']:,} / {counts['included']:,} included pairs; "
+                       f"exclusions: {exclusions}")
+
+    def series(self, source, term):
+        bins = [{"quarter": quarter.isoformat(), "n": values["n"], "edited": values["edited"],
+                 "rate": values["edited"] / values["n"], "used": values["n"] >= MIN_N}
+                for quarter, values in sorted(self.counts[source, term].items())]
+        return {"bins": bins, "fit": fit_trend(bins)}
+
+
+def fit_trend(bins):
+    """Equal-weight OLS of eligible quarterly rates; slope is percentage points/year."""
+    eligible = [row for row in bins if row["used"]]
+    if len(eligible) < 2:
+        return None
+    dates = pd.to_datetime([row["quarter"] for row in eligible])
+    x = (dates - dates[0]).days.to_numpy() / DAYS_PER_YEAR
+    y = np.array([100 * row["rate"] for row in eligible])
+    result = stats.linregress(x, y)
+    fit = {"bins": len(eligible), "origin": dates[0].isoformat(),
+           "slope_pp_per_year": float(result.slope), "intercept": float(result.intercept),
+           "ci_low": None, "ci_high": None, "p_value": None}
+    # Two points have no residual degrees of freedom; constant rates have no variance.
+    if len(eligible) >= 3 and np.ptp(y) > 0:
+        margin = stats.t.ppf(0.975, len(eligible) - 2) * result.stderr
+        fit.update(ci_low=float(result.slope - margin), ci_high=float(result.slope + margin),
+                   p_value=float(result.pvalue))
+    return fit
+
+
+def plot_time_trends(results, term, output):
+    fig, ax = plt.subplots(figsize=(13, 8))
+    missing = []
+    for source, series in results.items():
+        bins, fit = series["bins"], series["fit"]
+        eligible = [row for row in bins if row["used"]]
+        if not eligible:
+            missing.append(SOURCE_NAMES[source])
+            continue
+        rates = pd.Series({pd.Timestamp(row["quarter"]): 100 * row["rate"] if row["used"] else float("nan")
+                           for row in bins})
+        rates = rates.reindex(pd.date_range(rates.index.min(), rates.index.max(), freq="QS"))
+        color = SOURCE_COLORS[source]
+        n = sum(row["n"] for row in eligible)
+        ax.plot(rates.index, rates.values, marker="o", color=color, linewidth=2,
+                label=f"{SOURCE_NAMES[source]} (n={n:,}; {len(eligible)} quarters)")
+        if fit is None:
+            continue
+        dates = pd.to_datetime([eligible[0]["quarter"], eligible[-1]["quarter"]])
+        years = (dates - pd.Timestamp(fit["origin"])).days / DAYS_PER_YEAR
+        detail = "95% CI / p unavailable"
+        if fit["ci_low"] is not None:
+            detail = f"95% CI [{fit['ci_low']:+.2f}, {fit['ci_high']:+.2f}]; p={fit['p_value']:.3g}"
+        ax.plot(dates, fit["intercept"] + fit["slope_pp_per_year"] * years,
+                linestyle="--", color=color, linewidth=2,
+                label=f"{SOURCE_NAMES[source]} fit: {fit['slope_pp_per_year']:+.2f} pp/year\n{detail}")
+    title = "Physician edit rate over time" if term is None else f"{term} — edit rate over time"
+    ax.set_title(fill(title, 65), loc="left", fontweight="bold", pad=20)
+    ax.set(ylim=(0, 100), ylabel="Edit rate (%)", xlabel="Calendar quarter")
+    ax.yaxis.set_major_formatter(PercentFormatter())
+    clean_ax(ax)
+    if ax.lines:
+        locator = AutoDateLocator()
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(ConciseDateFormatter(locator))
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=len(results),
+                  frameon=False, fontsize=13)
+    else:
+        ax.text(0.5, 0.5, f"No quarters with n ≥ {MIN_N}", transform=ax.transAxes, ha="center", color=GRAY)
+        ax.set_xticks([])
+    denominator = "all included pairs" if term is None else "pairs retaining, adding, or deleting this exact term"
+    coverage = f"No eligible quarters: {', '.join(missing)}.\n" if missing else ""
+    fig.text(0.08, 0.01, coverage + f"Denominator: {denominator}.\n"
+             f"Minimum n={MIN_N} per quarter; equal-weight linear fit; pp = percentage points.",
+             fontsize=13, color=GRAY)
+    fig.subplots_adjust(bottom=0.37, top=0.86, left=0.09, right=0.98)
+    save_figure(fig, output)
+
+
+def time_plots(counts, sources, selections, output):
+    def series(term):
+        return {source: counts.series(source, term) for source in sources}
+
+    overall = series(None)
+    terms = {term: series(term) for statements in selections.values() for term in statements}
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "trends.json").write_text(json.dumps({
+        "method": {"bin": "calendar quarter", "min_n": MIN_N, "fit": "equal-weight OLS of quarterly rates",
+                   "slope_unit": "percentage points per year", "confidence_level": 0.95,
+                   "dates": {"agh": "EditDate (before 2030-01-01)", "heedb_old": "ECGAcquisitionTime"}},
+        "coverage": {source: dict(counts.coverage[source]) for source in sources},
+        "overall": overall, "terms": terms,
+    }, indent=2, allow_nan=False))
+    jobs = [partial(plot_time_trends, overall, None, output / "overall.png")]
     for category, statements in selections.items():
-        slug = category.lower().replace(" / ", "_").replace(" ", "_") or "selected_statements"
-        for metric in TERM_METRICS:
-            jobs.append(partial(plot_term_metrics, results, statements, metric,
-                                output / slug / f"{metric}.png", category))
+        for index, term in enumerate(statements, 1):
+            name = re.sub(r"[^a-z0-9]+", "_", term).strip("_")
+            jobs.append(partial(plot_time_trends, terms[term], term,
+                                output / category_slug(category) / f"{index:02d}_{name}.png"))
     return jobs
+
+
+def dataset_plots(results, selections, times, output):
+    return (main_plots(results, output)
+            + term_plots(results, selections, output / "term_metrics")
+            + time_plots(times, results, selections, output / "time_trends"))
 
 
 def print_examples(groups):
@@ -463,28 +722,35 @@ def _write_page(snapshot, page, annotation_script=""):
     return page
 
 
+def _write_run(snapshot, root, output):
+    snapshot["figures"] = {
+        source: [relpath(path, root) for path in sorted((output / source).rglob("*.png"))]
+        for source in snapshot["summary"]
+    }
+    return _write_page(snapshot, root / "index.html")
+
+
 def export_run(root):
     """Export the HTML browser and figures from saved pairs."""
     root = Path(root)
     groups = {}
     labels = {"LLM": "category"}
     statements = {statement for terms in TERMS.values() for statement in terms}
-    snapshot = _snapshot(root, consume=partial(count_statements, groups=groups,
-                                             labels=labels, statements=statements))
+    times = TimeCounts(statements)
+
+    def consume(record):
+        count_statements(record, groups, labels, statements)
+        times.count(record)
+
+    snapshot = _snapshot(root, consume=consume)
+    times.finish()
     jobs = []
-    snapshot["figures"] = {}
     for source, metrics in snapshot["summary"].items():
         output = root / "figures" / source
-        jobs.extend(main_plots({source: metrics}, output))
-        jobs.extend(term_plots({source: metrics}, TERMS, output / "term_metrics"))
+        jobs.extend(dataset_plots({source: metrics}, TERMS, times, output))
         jobs.extend(statement_plots({source: groups[source]}, labels, TERMS, output / "statements"))
-    with plt.rc_context(STYLE):
-        for job in tqdm(jobs, desc="Plotting figures", unit="figure"):
-            job()
-    for source in snapshot["summary"]:
-        snapshot["figures"][source] = [str(path.relative_to(root))
-                                        for path in sorted((root / "figures" / source).rglob("*.png"))]
-    return _write_page(snapshot, root / "index.html")
+    plot_jobs(jobs)
+    return _write_run(snapshot, root, root / "figures")
 
 
 def main():
@@ -497,11 +763,16 @@ def main():
     parser.add_argument("--statements", nargs="+", help="Exact statements, ignoring case; otherwise use terms.py categories.")
     parser.add_argument("--output", type=Path, help="Figure directory; defaults to figures beside the first input; combined plots go in combined/.")
     parser.add_argument("--examples", type=int, default=0, help="Printed examples per statement/category (default: 0).")
+    parser.add_argument("--heed-root", type=Path, default=HEED_ROOT,
+                        help="Legacy HEEDB metadata root; used when NPY files lack ECGAcquisitionTime.")
+    parser.add_argument("--workers", type=int, default=8, help="Concurrent HEEDB date reads (default: 8).")
     args = parser.parse_args()
     if not (args.config or args.runs or args.pairs or args.annotations):
         parser.error("Provide --config, --runs, --pairs, or --annotations.")
     if args.examples < 0:
         parser.error("--examples must be nonnegative.")
+    if args.workers < 1:
+        parser.error("--workers must be positive.")
     selections = TERMS
     if args.statements:
         statements = list(dict.fromkeys(statement.lower() for statement in args.statements))
@@ -520,21 +791,24 @@ def main():
     output = args.output or (paths or args.annotations)[0].parent / "figures"
     counts, groups, jobs, snapshots = {}, {}, [], []
     labels = {"LLM": "category"}
-    consume = partial(count_statements, groups=groups, labels=labels,
-                      statements=statements, examples=args.examples)
+    times = TimeCounts(statements, args.heed_root, args.workers)
+
+    def consume(record):
+        count_statements(record, groups, labels, statements, examples=args.examples)
+        times.count(record)
+
     for path in paths:
         keep_pairs = bool(args.config or args.runs)
         snapshot = _snapshot(path.parent, path=path, consume=consume, keep_pairs=keep_pairs, totals=counts)
         if keep_pairs:
             snapshots.append((path.parent, snapshot))
     if counts:
+        times.finish()
         results = summarize(counts, empty_reports="saved pairs", undefined_ratio=None)
         for source, metrics in results.items():
-            jobs.extend(main_plots({source: metrics}, output / source))
-            jobs.extend(term_plots({source: metrics}, selections, output / source / "term_metrics"))
+            jobs.extend(dataset_plots({source: metrics}, selections, times, output / source))
         if len(results) > 1:
-            jobs.extend(main_plots(results, output / "combined"))
-            jobs.extend(term_plots(results, selections, output / "combined" / "term_metrics"))
+            jobs.extend(dataset_plots(results, selections, times, output / "combined"))
         jobs.extend(statement_plots(groups, labels, selections, output / "statements"))
     if args.annotations:
         records, annotation_labels = load_annotations(args.annotations)
@@ -544,15 +818,9 @@ def main():
         jobs.extend(statement_plots(annotation_groups, annotation_labels, selections, output / "annotations"))
     if not jobs:
         parser.error("No AGH or HEEDB pairs found.")
-    with plt.rc_context(STYLE):
-        for job in tqdm(jobs, desc="Plotting figures", unit="figure"):
-            job()
+    plot_jobs(jobs)
     for root, snapshot in snapshots:
-        snapshot["figures"] = {
-            source: [relpath(path, root) for path in sorted((output / source).rglob("*.png"))]
-            for source in snapshot["summary"]
-        }
-        _write_page(snapshot, root / "index.html")
+        _write_run(snapshot, root, output)
     if args.examples:
         print_examples(groups)
     print(f"Saved figures to {output}")
