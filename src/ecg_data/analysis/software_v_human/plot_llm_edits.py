@@ -61,6 +61,8 @@ STYLE = {
 HEED_ROOT = Path("/p01/whan/data/HEED")  # Metadata location in the reference analysis.
 MIN_N = 5
 DAYS_PER_YEAR = 365.25
+# Bump when cached counts or their analysis change; styling can reuse them.
+ANALYSIS_VERSION = 1
 
 
 
@@ -603,6 +605,63 @@ class TimeCounts:
         return {"bins": bins, "fit": fit_trend(bins)}
 
 
+def _cache_key(paths, statements, examples, keep_pairs, heed_root):
+    files = []
+    for path in paths:
+        for file in (path, path.parent / "run.json"):
+            stamp = file.stat() if file.exists() else None
+            files.append([str(file.resolve()), [stamp.st_size, stamp.st_mtime_ns] if stamp else None])
+    return {"version": ANALYSIS_VERSION, "files": files, "statements": sorted(statements),
+            "examples": examples, "keep_pairs": keep_pairs, "heed_root": str(heed_root.resolve())}
+
+
+def _load_cache(path, key, times):
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        tqdm.write(f"Invalid analysis cache; rebuilding {path}")
+        return None
+    if data["key"] != key:
+        return None
+    counts = {source: {name: Counter(dict(items)) for name, items in current.items()}
+              for source, current in data["counts"].items()}
+    groups = {}
+    for source, terms in data["groups"].items():
+        groups[source] = {}
+        for term, current in terms.items():
+            saved = StatementCounts()
+            saved.labels["category"].update(dict(current["labels"]))
+            saved.examples.update(current["examples"])
+            groups[source][term] = saved
+    times.coverage.update({source: Counter(values) for source, values in data["coverage"].items()})
+    for source, term, quarter, values in data["times"]:
+        times.counts[source, term][datetime.fromisoformat(quarter)].update(values)
+    snapshots = [(Path(root), snapshot) for root, snapshot in data["snapshots"]]
+    tqdm.write(f"Using analysis cache: {path}")
+    return counts, groups, snapshots
+
+
+def _save_cache(path, key, counts, groups, times, snapshots):
+    data = {
+        "key": key,
+        "counts": {source: {name: list(counter.items()) for name, counter in current.items()}
+                   for source, current in counts.items()},
+        "groups": {source: {term: {"labels": list(current.labels["category"].items()),
+                                   "examples": dict(current.examples)}
+                            for term, current in terms.items()} for source, terms in groups.items()},
+        "coverage": dict(times.coverage),
+        "times": [[source, term, quarter.isoformat(), dict(values)]
+                  for (source, term), quarters in times.counts.items() for quarter, values in quarters.items()],
+        "snapshots": [[str(root), snapshot] for root, snapshot in snapshots],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(data, allow_nan=False))
+    temporary.replace(path)
+
+
 def fit_trend(bins):
     """Equal-weight OLS of eligible quarterly rates; slope is percentage points/year."""
     eligible = [row for row in bins if row["used"]]
@@ -623,6 +682,12 @@ def fit_trend(bins):
     return fit
 
 
+def _time_rates(bins):
+    rates = pd.Series({pd.Timestamp(row["quarter"]): 100 * row["rate"] if row["used"] else float("nan")
+                       for row in bins})
+    return rates.reindex(pd.date_range(rates.index.min(), rates.index.max(), freq="QS"))
+
+
 def plot_time_trends(results, term, output):
     fig, ax = plt.subplots(figsize=(13, 8))
     missing = []
@@ -632,9 +697,7 @@ def plot_time_trends(results, term, output):
         if not eligible:
             missing.append(SOURCE_NAMES[source])
             continue
-        rates = pd.Series({pd.Timestamp(row["quarter"]): 100 * row["rate"] if row["used"] else float("nan")
-                           for row in bins})
-        rates = rates.reindex(pd.date_range(rates.index.min(), rates.index.max(), freq="QS"))
+        rates = _time_rates(bins)
         color = SOURCE_COLORS[source]
         n = sum(row["n"] for row in eligible)
         ax.plot(rates.index, rates.values, marker="o", color=color, linewidth=2,
@@ -672,6 +735,51 @@ def plot_time_trends(results, term, output):
     save_figure(fig, output)
 
 
+def plot_time_category(terms, category, output):
+    """Overlay existing term rates; use the same term colors in each dataset panel."""
+    sources = list(next(iter(terms.values())))
+    columns = 2 if len(sources) == 1 else 3
+    legend_rows = (len(terms) + columns - 1) // columns
+    height = 7 + 0.5 * legend_rows
+    fig, axes = plt.subplots(1, len(sources), figsize=(max(13, 8 * len(sources)), height),
+                             sharey=True, squeeze=False)
+    colors = plt.get_cmap("tab20").colors
+    colors = colors[::2] + colors[1::2]
+    handles = {}
+    for ax, source in zip(axes[0], sources):
+        for index, (term, results) in enumerate(terms.items()):
+            bins = results[source]["bins"]
+            if not any(row["used"] for row in bins):
+                continue
+            rates = _time_rates(bins)
+            line, = ax.plot(rates.index, rates.values, marker="o", markersize=4, linewidth=2,
+                            color=colors[index % len(colors)], label=fill(term, 32))
+            handles.setdefault(term, line)
+        ax.set(title=SOURCE_NAMES[source], ylim=(0, 100), xlabel="Calendar quarter")
+        ax.yaxis.set_major_formatter(PercentFormatter())
+        clean_ax(ax)
+        if ax.lines:
+            locator = AutoDateLocator(minticks=3, maxticks=6)
+            ax.xaxis.set_major_locator(locator)
+            ax.xaxis.set_major_formatter(ConciseDateFormatter(locator))
+        else:
+            ax.text(0.5, 0.5, f"No quarters with n ≥ {MIN_N}", transform=ax.transAxes,
+                    ha="center", color=GRAY)
+            ax.set_xticks([])
+    axes[0, 0].set_ylabel("Edit rate (%)")
+    title = f"{category or 'Selected statements'} — edit rates over time"
+    fig.suptitle(fill(title, 75), x=0.08, ha="left", fontweight="bold", fontsize=24, y=1 - 0.15 / height)
+    if handles:
+        fig.legend(handles=[handles[term] for term in terms if term in handles],
+                   loc="upper center", bbox_to_anchor=(0.53, (0.55 + 0.5 * legend_rows) / height),
+                   ncol=columns, frameon=False, fontsize=13)
+    fig.text(0.08, 0.02, "Denominator: pairs retaining, adding, or deleting each exact term.\n"
+             f"Minimum n={MIN_N} per quarter; gaps mark missing or smaller quarters.", fontsize=13, color=GRAY)
+    fig.subplots_adjust(left=0.08, right=0.98, top=1 - 1.2 / height,
+                        bottom=(1.2 + 0.5 * legend_rows) / height, wspace=0.12)
+    save_figure(fig, output)
+
+
 def time_plots(counts, sources, selections, output):
     def series(term):
         return {source: counts.series(source, term) for source in sources}
@@ -688,6 +796,8 @@ def time_plots(counts, sources, selections, output):
     }, indent=2, allow_nan=False))
     jobs = [partial(plot_time_trends, overall, None, output / "overall.png")]
     for category, statements in selections.items():
+        jobs.append(partial(plot_time_category, {term: terms[term] for term in statements}, category,
+                            output / category_slug(category) / "combined.png"))
         for index, term in enumerate(statements, 1):
             name = re.sub(r"[^a-z0-9]+", "_", term).strip("_")
             jobs.append(partial(plot_time_trends, terms[term], term,
@@ -766,6 +876,8 @@ def main():
     parser.add_argument("--heed-root", type=Path, default=HEED_ROOT,
                         help="Legacy HEEDB metadata root; used when NPY files lack ECGAcquisitionTime.")
     parser.add_argument("--workers", type=int, default=8, help="Concurrent HEEDB date reads (default: 8).")
+    parser.add_argument("--refresh-cache", action="store_true",
+                        help="Rebuild cached analysis, including ECG dates; otherwise reuse unchanged inputs.")
     args = parser.parse_args()
     if not (args.config or args.runs or args.pairs or args.annotations):
         parser.error("Provide --config, --runs, --pairs, or --annotations.")
@@ -792,18 +904,25 @@ def main():
     counts, groups, jobs, snapshots = {}, {}, [], []
     labels = {"LLM": "category"}
     times = TimeCounts(statements, args.heed_root, args.workers)
+    keep_pairs = bool(args.config or args.runs)
+    cache = output / ".cache" / "analysis.json"
+    key = _cache_key(paths, statements, args.examples, keep_pairs, args.heed_root)
+    cached = _load_cache(cache, key, times) if paths and not args.refresh_cache else None
 
     def consume(record):
         count_statements(record, groups, labels, statements, examples=args.examples)
         times.count(record)
 
-    for path in paths:
-        keep_pairs = bool(args.config or args.runs)
-        snapshot = _snapshot(path.parent, path=path, consume=consume, keep_pairs=keep_pairs, totals=counts)
-        if keep_pairs:
-            snapshots.append((path.parent, snapshot))
-    if counts:
+    if cached is not None:
+        counts, groups, snapshots = cached
+    elif paths:
+        for path in paths:
+            snapshot = _snapshot(path.parent, path=path, consume=consume, keep_pairs=keep_pairs, totals=counts)
+            if keep_pairs:
+                snapshots.append((path.parent, snapshot))
         times.finish()
+        _save_cache(cache, key, counts, groups, times, snapshots)
+    if counts:
         results = summarize(counts, empty_reports="saved pairs", undefined_ratio=None)
         for source, metrics in results.items():
             jobs.extend(dataset_plots({source: metrics}, selections, times, output / source))
