@@ -719,9 +719,8 @@ def plot_time_trends(results, term, output):
         locator = AutoDateLocator()
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(ConciseDateFormatter(locator))
-        fig.legend(*ax.get_legend_handles_labels(), loc="upper left",
-                   bbox_to_anchor=(0.09, 0.16, 0.89, 0), mode="expand", borderaxespad=0,
-                   ncol=min(2, len(ax.lines)), frameon=False, fontsize=13)
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=len(results),
+                  frameon=False, fontsize=13)
     else:
         ax.text(0.5, 0.5, f"No quarters with n ≥ {MIN_N}", transform=ax.transAxes, ha="center", color=GRAY)
         ax.set_xticks([])
@@ -732,10 +731,11 @@ def plot_time_trends(results, term, output):
 def plot_time_category(terms, category, output):
     """Overlay existing term rates; use the same term colors in each dataset panel."""
     sources = list(next(iter(terms.values())))
-    columns = 2 if len(sources) == 1 else 3
+    columns = (len(terms) + 1) // 2
     legend_rows = (len(terms) + columns - 1) // columns
     height = 6.4 + 0.5 * legend_rows
-    fig, axes = plt.subplots(1, len(sources), figsize=(max(13, 8 * len(sources)), height),
+    width = max(13, 8 * len(sources), 3 * columns)
+    fig, axes = plt.subplots(1, len(sources), figsize=(width, height),
                              sharey=True, squeeze=False)
     colors = plt.get_cmap("tab20").colors
     colors = colors[::2] + colors[1::2]
@@ -747,7 +747,7 @@ def plot_time_category(terms, category, output):
                 continue
             rates = _time_rates(bins)
             line, = ax.plot(rates.index, rates.values, marker="o", markersize=4, linewidth=2,
-                            color=colors[index % len(colors)], label=fill(term, 32))
+                            color=colors[index % len(colors)], label=fill(term, 24))
             handles.setdefault(term, line)
         ax.set(title=SOURCE_NAMES[source], ylim=(0, 100), xlabel="Time")
         ax.yaxis.set_major_formatter(PercentFormatter())
