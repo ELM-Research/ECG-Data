@@ -690,12 +690,10 @@ def _time_rates(bins):
 
 def plot_time_trends(results, term, output):
     fig, ax = plt.subplots(figsize=(13, 8))
-    missing = []
     for source, series in results.items():
         bins, fit = series["bins"], series["fit"]
         eligible = [row for row in bins if row["used"]]
         if not eligible:
-            missing.append(SOURCE_NAMES[source])
             continue
         rates = _time_rates(bins)
         color = SOURCE_COLORS[source]
@@ -714,24 +712,20 @@ def plot_time_trends(results, term, output):
                 label=f"{SOURCE_NAMES[source]} fit: {fit['slope_pp_per_year']:+.2f} pp/year\n{detail}")
     title = "Physician edit rate over time" if term is None else f"{term} — edit rate over time"
     ax.set_title(fill(title, 65), loc="left", fontweight="bold", pad=20)
-    ax.set(ylim=(0, 100), ylabel="Edit rate (%)", xlabel="Calendar quarter")
+    ax.set(ylim=(0, 100), ylabel="Edit rate (%)", xlabel="Time")
     ax.yaxis.set_major_formatter(PercentFormatter())
     clean_ax(ax)
     if ax.lines:
         locator = AutoDateLocator()
         ax.xaxis.set_major_locator(locator)
         ax.xaxis.set_major_formatter(ConciseDateFormatter(locator))
-        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=len(results),
-                  frameon=False, fontsize=13)
+        fig.legend(*ax.get_legend_handles_labels(), loc="upper left",
+                   bbox_to_anchor=(0.09, 0.16, 0.89, 0), mode="expand", borderaxespad=0,
+                   ncol=min(2, len(ax.lines)), frameon=False, fontsize=13)
     else:
         ax.text(0.5, 0.5, f"No quarters with n ≥ {MIN_N}", transform=ax.transAxes, ha="center", color=GRAY)
         ax.set_xticks([])
-    denominator = "all included pairs" if term is None else "pairs retaining, adding, or deleting this exact term"
-    coverage = f"No eligible quarters: {', '.join(missing)}.\n" if missing else ""
-    fig.text(0.08, 0.01, coverage + f"Denominator: {denominator}.\n"
-             f"Minimum n={MIN_N} per quarter; equal-weight linear fit; pp = percentage points.",
-             fontsize=13, color=GRAY)
-    fig.subplots_adjust(bottom=0.37, top=0.86, left=0.09, right=0.98)
+    fig.subplots_adjust(bottom=0.3, top=0.86, left=0.09, right=0.98)
     save_figure(fig, output)
 
 
@@ -740,7 +734,7 @@ def plot_time_category(terms, category, output):
     sources = list(next(iter(terms.values())))
     columns = 2 if len(sources) == 1 else 3
     legend_rows = (len(terms) + columns - 1) // columns
-    height = 7 + 0.5 * legend_rows
+    height = 6.4 + 0.5 * legend_rows
     fig, axes = plt.subplots(1, len(sources), figsize=(max(13, 8 * len(sources)), height),
                              sharey=True, squeeze=False)
     colors = plt.get_cmap("tab20").colors
@@ -755,7 +749,7 @@ def plot_time_category(terms, category, output):
             line, = ax.plot(rates.index, rates.values, marker="o", markersize=4, linewidth=2,
                             color=colors[index % len(colors)], label=fill(term, 32))
             handles.setdefault(term, line)
-        ax.set(title=SOURCE_NAMES[source], ylim=(0, 100), xlabel="Calendar quarter")
+        ax.set(title=SOURCE_NAMES[source], ylim=(0, 100), xlabel="Time")
         ax.yaxis.set_major_formatter(PercentFormatter())
         clean_ax(ax)
         if ax.lines:
@@ -771,12 +765,10 @@ def plot_time_category(terms, category, output):
     fig.suptitle(fill(title, 75), x=0.08, ha="left", fontweight="bold", fontsize=24, y=1 - 0.15 / height)
     if handles:
         fig.legend(handles=[handles[term] for term in terms if term in handles],
-                   loc="upper center", bbox_to_anchor=(0.53, (0.55 + 0.5 * legend_rows) / height),
-                   ncol=columns, frameon=False, fontsize=13)
-    fig.text(0.08, 0.02, "Denominator: pairs retaining, adding, or deleting each exact term.\n"
-             f"Minimum n={MIN_N} per quarter; gaps mark missing or smaller quarters.", fontsize=13, color=GRAY)
+                   loc="upper left", bbox_to_anchor=(0.08, 0.5 * legend_rows / height, 0.9, 0),
+                   mode="expand", borderaxespad=0, ncol=columns, frameon=False, fontsize=13)
     fig.subplots_adjust(left=0.08, right=0.98, top=1 - 1.2 / height,
-                        bottom=(1.2 + 0.5 * legend_rows) / height, wspace=0.12)
+                        bottom=(0.65 + 0.5 * legend_rows) / height, wspace=0.12)
     save_figure(fig, output)
 
 
