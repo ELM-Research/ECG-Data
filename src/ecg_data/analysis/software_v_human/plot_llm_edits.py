@@ -38,10 +38,10 @@ CATEGORY_COLORS = {"preferential": DARK_RED, "factual": LIGHT_RED, "uncertain": 
 SOURCE_COLORS = {"agh": RED, "heedb_old": GRAY}
 STATEMENT_CATEGORIES = ("preferential", "factual")
 METRIC_LABELS = {
-    "sensitivity": ("Sensitivity", "Present in both / present in physician report"),
-    "specificity": ("Specificity", "Absent from both / absent from physician report"),
-    "ppv": ("Positive predictive value (PPV)", "Present in both / present in software report"),
-    "npv": ("Negative predictive value (NPV)", "Absent from both / absent from software report"),
+    "sensitivity": "Sensitivity",
+    "specificity": "Specificity",
+    "ppv": "Positive predictive value (PPV)",
+    "npv": "Negative predictive value (NPV)",
 }
 STYLE = {
     "font.family": "DejaVu Sans", "font.size": 18, "axes.titlesize": 24,
@@ -398,19 +398,16 @@ def statement_plots(groups, labels, selections, output):
 
 def plot_term_metrics(results, statements, metric, output, category=""):
     """Compare exact statement presence across all included report pairs."""
-    title, definition = METRIC_LABELS[metric]
+    title = METRIC_LABELS[metric]
     label_width, column_width = 5, 6.5
     width = label_width + column_width * len(results) + 0.4
     title = fill(f"{category} — {title}" if category else title, int(width * 4))
-    header = 1.9 + 0.4 * title.count("\n")
+    header = 1.2 + 0.4 * title.count("\n")
     height = header + 0.9 * len(statements) + 0.6
     fig, axes = plt.subplots(1, len(results), figsize=(width, height), squeeze=False)
     fig.subplots_adjust(left=label_width / width, right=1 - 1.9 / width,
                         top=1 - header / height, bottom=0.6 / height, wspace=0.8)
     fig.text(0.25 / width, 1 - 0.2 / height, title, fontsize=24, fontweight="bold", va="top")
-    fig.text(0.25 / width, 1 - (header - 1.15) / height,
-             f"{definition}\nExact statements · all included report pairs",
-             fontsize=16, color=GRAY, va="top")
     numerator, denominator = TERM_METRICS[metric]
     for column, (source, metrics) in enumerate(results.items()):
         ax = axes[0, column]
