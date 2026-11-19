@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache, partial
 from itertools import combinations
+from math import ceil
 from os.path import relpath
 from pathlib import Path
 from textwrap import fill
@@ -60,6 +61,11 @@ STYLE = {
 
 HEED_ROOT = Path("/p01/whan/data/HEED")  # Metadata location in the reference analysis.
 DAYS_PER_YEAR = 365.25
+RATE_WINDOW = pd.Timedelta(days=90)
+MIN_RATE_PAIRS = 5
+MAX_RATE_MARKERS = 40
+RATE_LABEL = f"{RATE_WINDOW.days}-day rolling edit rate (%)"
+NO_RATE_DATA = f"No {RATE_WINDOW.days}-day windows with ≥{MIN_RATE_PAIRS} pairs"
 # Bump when cached counts or their analysis change; styling can reuse them.
 ANALYSIS_VERSION = 2
 
@@ -600,7 +606,8 @@ class TimeEdits:
         observations = self.observations[source, term]
         dates = pd.DatetimeIndex([date for date, _ in observations])
         outcomes = 100 * np.array([edited for _, edited in observations], dtype=np.uint8)
-        return {"dates": dates, "outcomes": outcomes, "fit": fit_trend(dates, outcomes)}
+        return {"dates": dates, "outcomes": outcomes, "rates": _rolling_edit_rate(dates, outcomes),
+                "fit": fit_trend(dates, outcomes)}
 
 
 def _cache_key(paths, statements, examples, keep_pairs, heed_root):
@@ -685,6 +692,28 @@ def fit_trend(dates, outcomes):
     return fit
 
 
+def _rolling_edit_rate(dates, outcomes):
+    """Estimate the local rate at each observed date, counting every pair once per window."""
+    counts = pd.Series(outcomes, index=dates).groupby(level=0).agg(["sum", "size"])
+    totals = counts.rolling(RATE_WINDOW, center=True).sum()
+    rates = (totals["sum"] / totals["size"]).where(totals["size"] >= MIN_RATE_PAIRS)
+
+    # Break the line across intervals that contain an empty window.
+    spacing = rates.index.to_series().diff()
+    gaps = spacing[spacing > RATE_WINDOW]
+    return rates.reindex(rates.index.union(gaps.index - gaps.array / 2))
+
+
+def _plot_rolling_rate(ax, rates, color, label):
+    valid = np.flatnonzero(rates.notna())
+    if not len(valid):
+        return None
+    markers = valid[::ceil(len(valid) / MAX_RATE_MARKERS)]
+    line, = ax.plot(rates.index, rates.values, marker="o", markersize=4, linewidth=2,
+                    markevery=markers, color=color, label=label)
+    return line
+
+
 def plot_time_trends(results, term, output):
     fig, ax = plt.subplots(figsize=(13, 8))
     for source, series in results.items():
@@ -692,8 +721,7 @@ def plot_time_trends(results, term, output):
         if dates.empty:
             continue
         color = SOURCE_COLORS[source]
-        ax.plot(dates, series["outcomes"], linestyle="none", marker="o", markersize=3,
-                color=color, alpha=0.3, label=f"{SOURCE_NAMES[source]} (n={len(dates):,})")
+        _plot_rolling_rate(ax, series["rates"], color, f"{SOURCE_NAMES[source]} (n={len(dates):,})")
         if fit is None:
             continue
         endpoints = pd.DatetimeIndex([dates.min(), dates.max()])
@@ -706,7 +734,7 @@ def plot_time_trends(results, term, output):
                 label=f"{SOURCE_NAMES[source]} fit: {fit['slope_pp_per_year']:+.2f} pp/year\n{detail}")
     title = "Physician edit rate over time" if term is None else f"{term} — edit rate over time"
     ax.set_title(fill(title, 65), loc="left", fontweight="bold", pad=20)
-    ax.set(ylim=(-5, 105), ylabel="Edit rate (%)", xlabel="Time")
+    ax.set(ylim=(0, 100), ylabel=RATE_LABEL, xlabel="Time")
     ax.yaxis.set_major_formatter(PercentFormatter())
     clean_ax(ax)
     if ax.lines:
@@ -716,14 +744,14 @@ def plot_time_trends(results, term, output):
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=len(results),
                   frameon=False, fontsize=13)
     else:
-        ax.text(0.5, 0.5, "No dated pairs", transform=ax.transAxes, ha="center", color=GRAY)
+        ax.text(0.5, 0.5, NO_RATE_DATA, transform=ax.transAxes, ha="center", color=GRAY)
         ax.set_xticks([])
     fig.subplots_adjust(bottom=0.3, top=0.86, left=0.09, right=0.98)
     save_figure(fig, output)
 
 
 def plot_time_category(terms, category, output):
-    """Overlay dated term outcomes using the same colors in each dataset panel."""
+    """Overlay rolling term rates using the same colors in each dataset panel."""
     sources = list(next(iter(terms.values())))
     columns = (len(terms) + 1) // 2
     legend_rows = (len(terms) + columns - 1) // columns
@@ -736,13 +764,10 @@ def plot_time_category(terms, category, output):
     handles = {}
     for ax, source in zip(axes[0], sources):
         for index, (term, results) in enumerate(terms.items()):
-            series = results[source]
-            if series["dates"].empty:
-                continue
-            line, = ax.plot(series["dates"], series["outcomes"], linestyle="none", marker="o", markersize=3,
-                            color=colors[index % len(colors)], alpha=0.3, label=fill(term, 24))
-            handles.setdefault(term, line)
-        ax.set(title=SOURCE_NAMES[source], ylim=(-5, 105), xlabel="Time")
+            line = _plot_rolling_rate(ax, results[source]["rates"], colors[index % len(colors)], fill(term, 24))
+            if line is not None:
+                handles.setdefault(term, line)
+        ax.set(title=SOURCE_NAMES[source], ylim=(0, 100), xlabel="Time")
         ax.yaxis.set_major_formatter(PercentFormatter())
         clean_ax(ax)
         if ax.lines:
@@ -750,10 +775,9 @@ def plot_time_category(terms, category, output):
             ax.xaxis.set_major_locator(locator)
             ax.xaxis.set_major_formatter(ConciseDateFormatter(locator))
         else:
-            ax.text(0.5, 0.5, "No dated pairs", transform=ax.transAxes,
-                    ha="center", color=GRAY)
+            ax.text(0.5, 0.5, NO_RATE_DATA, transform=ax.transAxes, ha="center", color=GRAY)
             ax.set_xticks([])
-    axes[0, 0].set_ylabel("Edit rate (%)")
+    axes[0, 0].set_ylabel(RATE_LABEL)
     title = f"{category or 'Selected statements'} — edit rates over time"
     fig.suptitle(fill(title, 75), x=0.08, ha="left", fontweight="bold", fontsize=24, y=1 - 0.15 / height)
     if handles:
@@ -779,6 +803,7 @@ def time_plots(times, sources, selections, output):
     output.mkdir(parents=True, exist_ok=True)
     (output / "trends.json").write_text(json.dumps({
         "method": {"fit": "OLS of individual binary edit outcomes with HC1 standard errors",
+                   "display": {"window_days": RATE_WINDOW.days, "min_pairs": MIN_RATE_PAIRS, "centered": True},
                    "slope_unit": "percentage points per year", "confidence_level": 0.95,
                    "dates": {"agh": "EditDate (before 2030-01-01)", "heedb_old": "ECGAcquisitionTime"}},
         "coverage": {source: dict(times.coverage[source]) for source in sources},
