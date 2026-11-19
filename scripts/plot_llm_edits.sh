@@ -2,10 +2,10 @@
 
 # AGH and HEEDB, grouped by statement category.
 # PPV, NPV, sensitivity, and specificity go in each dataset's term_metrics/ and combined/term_metrics/.
-# Overall and per-term quarterly trends go in time_trends/; trends.json saves counts, slopes, CIs, and p-values.
+# Overall and per-term trends use individual dated pairs. See time_trends/trends.json for fit statistics.
 # Each time_trends/<category>/combined.png overlays its terms; separate plots are kept.
-# Analysis is reused from figures/.cache/analysis.json when pairs, run metadata, and selections match.
-# Use --refresh-cache after changing source ECG dates or analysis code; styling needs no refresh.
+# The analysis cache rebuilds when its version, inputs, or selections change.
+# Use --refresh-cache if the source ECG dates change.
 # Legacy HEEDB dates use /p01/whan/data/HEED; override with --heed-root if needed.
 # HEEDB date reads use 8 threads; override with --workers.
 uv run python -m ecg_data.analysis.software_v_human.plot_llm_edits \
