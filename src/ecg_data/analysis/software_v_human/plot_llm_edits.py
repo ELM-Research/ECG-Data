@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache, partial
 from itertools import combinations
-from math import ceil
 from os.path import relpath
 from pathlib import Path
 from textwrap import fill
@@ -60,14 +59,10 @@ STYLE = {
 
 
 HEED_ROOT = Path("/p01/whan/data/HEED")  # Metadata location in the reference analysis.
+MIN_N = 5
 DAYS_PER_YEAR = 365.25
-RATE_WINDOW = pd.Timedelta(days=90)
-MIN_RATE_PAIRS = 5
-MAX_RATE_MARKERS = 40
-RATE_LABEL = f"{RATE_WINDOW.days}-day rolling edit rate (%)"
-NO_RATE_DATA = f"No {RATE_WINDOW.days}-day windows with ≥{MIN_RATE_PAIRS} pairs"
 # Bump when cached counts or their analysis change; styling can reuse them.
-ANALYSIS_VERSION = 2
+ANALYSIS_VERSION = 1
 
 
 
@@ -460,13 +455,13 @@ def term_plots(results, selections, output):
             for category, statements in selections.items() for metric in TERM_METRICS]
 
 
-def _acquisition_time(value):
+def _quarter(value):
     if not isinstance(value, (str, datetime, np.datetime64)):
         return None
     date = pd.to_datetime(value, format="ISO8601", errors="coerce")
     if pd.isna(date):
         return None
-    return date.tz_localize(None)
+    return datetime(date.year, 3 * ((date.month - 1) // 3) + 1, 1)
 
 
 @lru_cache(maxsize=1)
@@ -474,7 +469,8 @@ def _agh_dates(path):
     dates = pd.to_datetime([row.get("EditDate") for row in json.loads(path.read_text())],
                            format="%m-%d-%Y", errors="coerce")
     # The reference script excludes AGH dates from 2030 onward.
-    return [date if pd.notna(date) and date.year < 2030 else None for date in dates]
+    quarters = dates.where(dates < "2030-01-01").to_period("Q").to_timestamp()
+    return [None if pd.isna(date) else date.to_pydatetime() for date in quarters]
 
 
 def _heed_key(value):
@@ -495,12 +491,12 @@ def _file_name(value):
 
 def _heed_time(path):
     instance = np.load(path, allow_pickle=True).item()
-    date = _acquisition_time(instance.get("ECGAcquisitionTime"))
+    quarter = _quarter(instance.get("ECGAcquisitionTime"))
     legacy = None
-    if date is None and instance.get("file_path"):
+    if quarter is None and instance.get("file_path"):
         institution, name = _heed_key(instance["file_path"])
         legacy = institution, _file_name(name)
-    return date, legacy
+    return quarter, legacy
 
 
 def _metadata_dates(path, names):
@@ -514,29 +510,29 @@ def _metadata_dates(path, names):
                 raise ValueError(f"{path} requires FileName or FileID, and ECGAcquisitionTime.")
             chunk[key] = chunk[key].map(_file_name)
             matched = chunk[chunk[key].isin(names if key == "FileName" else ids)]
-            for name, value in matched[[key, "ECGAcquisitionTime"]].itertuples(index=False, name=None):
-                date = _acquisition_time(value)
-                if name in dates and dates[name] != date:
+            for name, date in matched[[key, "ECGAcquisitionTime"]].itertuples(index=False, name=None):
+                quarter = _quarter(date)
+                if name in dates and dates[name] != quarter:
                     raise ValueError(f"Conflicting acquisition dates for {name} in {path}")
-                dates[name] = date
+                dates[name] = quarter
     return {name: dates.get(name if key == "FileName" else Path(name).name) for name in names}
 
 
-class TimeEdits:
+class TimeCounts:
     def __init__(self, statements, heed_root=HEED_ROOT, workers=8):
         self.statements = set(statements)
         self.heed_root = Path(heed_root)
-        self.observations = defaultdict(list)
+        self.counts = defaultdict(lambda: defaultdict(Counter))
         self.coverage = defaultdict(Counter)
         self.pending = defaultdict(list)
         self.workers = workers
         self.pool = ThreadPoolExecutor(max_workers=workers)
         self.queue = deque()
 
-    def _add(self, source, date, changes):
+    def _add(self, source, quarter, changes):
         self.coverage[source]["dated"] += 1
         for term, edited in changes:
-            self.observations[source, term].append((date, edited))
+            self.counts[source, term][quarter].update(n=1, edited=int(edited))
 
     def count(self, record):
         source = record["source"]
@@ -560,22 +556,22 @@ class TimeEdits:
         index = record["pair_index"]
         if not 0 <= index < len(dates):
             raise ValueError(f"AGH pair index {index} is outside {path}")
-        date = dates[index]
-        if date is None:
+        quarter = dates[index]
+        if quarter is None:
             self.coverage[source]["invalid_or_missing_date"] += 1
             return
-        self._add(source, date, changes)
+        self._add(source, quarter, changes)
 
     def _collect(self):
         changes, future = self.queue.popleft()
-        date, legacy = future.result()
+        quarter, legacy = future.result()
         if legacy is not None:
             institution, name = legacy
             self.pending[institution].append((name, changes))
-        elif date is None:
+        elif quarter is None:
             self.coverage["heedb_old"]["invalid_or_missing_date"] += 1
         else:
-            self._add("heedb_old", date, changes)
+            self._add("heedb_old", quarter, changes)
 
     def finish(self):
         """Read each legacy institution CSV once, matching only requested ECGs."""
@@ -591,11 +587,11 @@ class TimeEdits:
                 continue
             dates = _metadata_dates(path, {name for name, _ in records})
             for name, changes in records:
-                date = dates[name]
-                if date is None:
+                quarter = dates[name]
+                if quarter is None:
                     self.coverage["heedb_old"]["unmatched_or_invalid_metadata_date"] += 1
                     continue
-                self._add("heedb_old", date, changes)
+                self._add("heedb_old", quarter, changes)
         self.pending.clear()
         for source, counts in self.coverage.items():
             exclusions = {key: n for key, n in counts.items() if key not in ("included", "dated")}
@@ -603,11 +599,10 @@ class TimeEdits:
                        f"exclusions: {exclusions}")
 
     def series(self, source, term):
-        observations = self.observations[source, term]
-        dates = pd.DatetimeIndex([date for date, _ in observations])
-        outcomes = 100 * np.array([edited for _, edited in observations], dtype=np.uint8)
-        return {"dates": dates, "outcomes": outcomes, "rates": _rolling_edit_rate(dates, outcomes),
-                "fit": fit_trend(dates, outcomes)}
+        bins = [{"quarter": quarter.isoformat(), "n": values["n"], "edited": values["edited"],
+                 "rate": values["edited"] / values["n"], "used": values["n"] >= MIN_N}
+                for quarter, values in sorted(self.counts[source, term].items())]
+        return {"bins": bins, "fit": fit_trend(bins)}
 
 
 def _cache_key(paths, statements, examples, keep_pairs, heed_root):
@@ -641,8 +636,8 @@ def _load_cache(path, key, times):
             saved.examples.update(current["examples"])
             groups[source][term] = saved
     times.coverage.update({source: Counter(values) for source, values in data["coverage"].items()})
-    for source, term, observations in data["times"]:
-        times.observations[source, term] = [(pd.Timestamp(date), edited) for date, edited in observations]
+    for source, term, quarter, values in data["times"]:
+        times.counts[source, term][datetime.fromisoformat(quarter)].update(values)
     snapshots = [(Path(root), snapshot) for root, snapshot in data["snapshots"]]
     tqdm.write(f"Using analysis cache: {path}")
     return counts, groups, snapshots
@@ -657,8 +652,8 @@ def _save_cache(path, key, counts, groups, times, snapshots):
                                    "examples": dict(current.examples)}
                             for term, current in terms.items()} for source, terms in groups.items()},
         "coverage": dict(times.coverage),
-        "times": [[source, term, [(date.isoformat(), edited) for date, edited in observations]]
-                  for (source, term), observations in times.observations.items()],
+        "times": [[source, term, quarter.isoformat(), dict(values)]
+                  for (source, term), quarters in times.counts.items() for quarter, values in quarters.items()],
         "snapshots": [[str(root), snapshot] for root, snapshot in snapshots],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -667,74 +662,57 @@ def _save_cache(path, key, counts, groups, times, snapshots):
     temporary.replace(path)
 
 
-def fit_trend(dates, outcomes):
-    """Fit one binary outcome per pair, with slope in percentage points per year."""
-    n = len(dates)
-    origin = dates.min()
-    if n < 2 or origin == dates.max():
+def fit_trend(bins):
+    """Equal-weight OLS of eligible quarterly rates; slope is percentage points/year."""
+    eligible = [row for row in bins if row["used"]]
+    if len(eligible) < 2:
         return None
-    x = ((dates - origin) / pd.Timedelta(days=DAYS_PER_YEAR)).to_numpy()
-    result = stats.linregress(x, outcomes)
-    fit = {"origin": origin.isoformat(),
+    dates = pd.to_datetime([row["quarter"] for row in eligible])
+    x = (dates - dates[0]).days.to_numpy() / DAYS_PER_YEAR
+    y = np.array([100 * row["rate"] for row in eligible])
+    result = stats.linregress(x, y)
+    fit = {"bins": len(eligible), "origin": dates[0].isoformat(),
            "slope_pp_per_year": float(result.slope), "intercept": float(result.intercept),
            "ci_low": None, "ci_high": None, "p_value": None}
-    if n < 3 or result.stderr == 0:
-        return fit
-
-    # Binary outcomes have nonconstant variance. Use HC1 standard errors.
-    centered = x - x.mean()
-    residuals = outcomes - (result.intercept + result.slope * x)
-    stderr = np.sqrt((n / (n - 2)) * np.sum((centered * residuals) ** 2)) / np.sum(centered ** 2)
-    if stderr > 0:
-        margin = stats.t.ppf(0.975, n - 2) * stderr
+    # Two points have no residual degrees of freedom; constant rates have no variance.
+    if len(eligible) >= 3 and np.ptp(y) > 0:
+        margin = stats.t.ppf(0.975, len(eligible) - 2) * result.stderr
         fit.update(ci_low=float(result.slope - margin), ci_high=float(result.slope + margin),
-                   p_value=float(2 * stats.t.sf(abs(result.slope) / stderr, n - 2)))
+                   p_value=float(result.pvalue))
     return fit
 
 
-def _rolling_edit_rate(dates, outcomes):
-    """Estimate the local rate at each observed date, counting every pair once per window."""
-    counts = pd.Series(outcomes, index=dates).groupby(level=0).agg(["sum", "size"])
-    totals = counts.rolling(RATE_WINDOW, center=True).sum()
-    rates = (totals["sum"] / totals["size"]).where(totals["size"] >= MIN_RATE_PAIRS)
-
-    # Break the line across intervals that contain an empty window.
-    spacing = rates.index.to_series().diff()
-    gaps = spacing[spacing > RATE_WINDOW]
-    return rates.reindex(rates.index.union(gaps.index - gaps.array / 2))
-
-
-def _plot_rolling_rate(ax, rates, color, label):
-    valid = np.flatnonzero(rates.notna())
-    if not len(valid):
-        return None
-    markers = valid[::ceil(len(valid) / MAX_RATE_MARKERS)]
-    line, = ax.plot(rates.index, rates.values, marker="o", markersize=4, linewidth=2,
-                    markevery=markers, color=color, label=label)
-    return line
+def _time_rates(bins):
+    rates = pd.Series({pd.Timestamp(row["quarter"]): 100 * row["rate"] if row["used"] else float("nan")
+                       for row in bins})
+    return rates.reindex(pd.date_range(rates.index.min(), rates.index.max(), freq="QS"))
 
 
 def plot_time_trends(results, term, output):
     fig, ax = plt.subplots(figsize=(13, 8))
     for source, series in results.items():
-        dates, fit = series["dates"], series["fit"]
-        if dates.empty:
+        bins, fit = series["bins"], series["fit"]
+        eligible = [row for row in bins if row["used"]]
+        if not eligible:
             continue
+        rates = _time_rates(bins)
         color = SOURCE_COLORS[source]
-        _plot_rolling_rate(ax, series["rates"], color, f"{SOURCE_NAMES[source]} (n={len(dates):,})")
+        n = sum(row["n"] for row in eligible)
+        ax.plot(rates.index, rates.values, marker="o", color=color, linewidth=2,
+                label=f"{SOURCE_NAMES[source]} (n={n:,}; {len(eligible)} quarters)")
         if fit is None:
             continue
-        endpoints = pd.DatetimeIndex([dates.min(), dates.max()])
-        years = (endpoints - endpoints[0]) / pd.Timedelta(days=DAYS_PER_YEAR)
+        dates = pd.to_datetime([eligible[0]["quarter"], eligible[-1]["quarter"]])
+        years = (dates - pd.Timestamp(fit["origin"])).days / DAYS_PER_YEAR
         detail = "95% CI / p unavailable"
         if fit["ci_low"] is not None:
             detail = f"95% CI [{fit['ci_low']:+.2f}, {fit['ci_high']:+.2f}]; p={fit['p_value']:.3g}"
-        ax.plot(endpoints, fit["intercept"] + fit["slope_pp_per_year"] * years,
+        ax.plot(dates, fit["intercept"] + fit["slope_pp_per_year"] * years,
                 linestyle="--", color=color, linewidth=2,
                 label=f"{SOURCE_NAMES[source]} fit: {fit['slope_pp_per_year']:+.2f} pp/year\n{detail}")
     title = "Physician edit rate over time" if term is None else f"{term} — edit rate over time"
     ax.set_title(fill(title, 65), loc="left", fontweight="bold", pad=20)
-    ax.set(ylim=(0, 100), ylabel=RATE_LABEL, xlabel="Time")
+    ax.set(ylim=(0, 100), ylabel="Edit rate (%)", xlabel="Time")
     ax.yaxis.set_major_formatter(PercentFormatter())
     clean_ax(ax)
     if ax.lines:
@@ -744,14 +722,14 @@ def plot_time_trends(results, term, output):
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=len(results),
                   frameon=False, fontsize=13)
     else:
-        ax.text(0.5, 0.5, NO_RATE_DATA, transform=ax.transAxes, ha="center", color=GRAY)
+        ax.text(0.5, 0.5, f"No quarters with n ≥ {MIN_N}", transform=ax.transAxes, ha="center", color=GRAY)
         ax.set_xticks([])
     fig.subplots_adjust(bottom=0.3, top=0.86, left=0.09, right=0.98)
     save_figure(fig, output)
 
 
 def plot_time_category(terms, category, output):
-    """Overlay rolling term rates using the same colors in each dataset panel."""
+    """Overlay existing term rates; use the same term colors in each dataset panel."""
     sources = list(next(iter(terms.values())))
     columns = (len(terms) + 1) // 2
     legend_rows = (len(terms) + columns - 1) // columns
@@ -764,9 +742,13 @@ def plot_time_category(terms, category, output):
     handles = {}
     for ax, source in zip(axes[0], sources):
         for index, (term, results) in enumerate(terms.items()):
-            line = _plot_rolling_rate(ax, results[source]["rates"], colors[index % len(colors)], fill(term, 24))
-            if line is not None:
-                handles.setdefault(term, line)
+            bins = results[source]["bins"]
+            if not any(row["used"] for row in bins):
+                continue
+            rates = _time_rates(bins)
+            line, = ax.plot(rates.index, rates.values, marker="o", markersize=4, linewidth=2,
+                            color=colors[index % len(colors)], label=fill(term, 24))
+            handles.setdefault(term, line)
         ax.set(title=SOURCE_NAMES[source], ylim=(0, 100), xlabel="Time")
         ax.yaxis.set_major_formatter(PercentFormatter())
         clean_ax(ax)
@@ -775,9 +757,10 @@ def plot_time_category(terms, category, output):
             ax.xaxis.set_major_locator(locator)
             ax.xaxis.set_major_formatter(ConciseDateFormatter(locator))
         else:
-            ax.text(0.5, 0.5, NO_RATE_DATA, transform=ax.transAxes, ha="center", color=GRAY)
+            ax.text(0.5, 0.5, f"No quarters with n ≥ {MIN_N}", transform=ax.transAxes,
+                    ha="center", color=GRAY)
             ax.set_xticks([])
-    axes[0, 0].set_ylabel(RATE_LABEL)
+    axes[0, 0].set_ylabel("Edit rate (%)")
     title = f"{category or 'Selected statements'} — edit rates over time"
     fig.suptitle(fill(title, 75), x=0.08, ha="left", fontweight="bold", fontsize=24, y=1 - 0.15 / height)
     if handles:
@@ -789,25 +772,19 @@ def plot_time_category(terms, category, output):
     save_figure(fig, output)
 
 
-def time_plots(times, sources, selections, output):
+def time_plots(counts, sources, selections, output):
     def series(term):
-        return {source: times.series(source, term) for source in sources}
-
-    def summary(results):
-        return {source: {"n": len(series["dates"]), "edited": int(np.count_nonzero(series["outcomes"])),
-                         "fit": series["fit"]}
-                for source, series in results.items()}
+        return {source: counts.series(source, term) for source in sources}
 
     overall = series(None)
     terms = {term: series(term) for statements in selections.values() for term in statements}
     output.mkdir(parents=True, exist_ok=True)
     (output / "trends.json").write_text(json.dumps({
-        "method": {"fit": "OLS of individual binary edit outcomes with HC1 standard errors",
-                   "display": {"window_days": RATE_WINDOW.days, "min_pairs": MIN_RATE_PAIRS, "centered": True},
+        "method": {"bin": "calendar quarter", "min_n": MIN_N, "fit": "equal-weight OLS of quarterly rates",
                    "slope_unit": "percentage points per year", "confidence_level": 0.95,
                    "dates": {"agh": "EditDate (before 2030-01-01)", "heedb_old": "ECGAcquisitionTime"}},
-        "coverage": {source: dict(times.coverage[source]) for source in sources},
-        "overall": summary(overall), "terms": {term: summary(results) for term, results in terms.items()},
+        "coverage": {source: dict(counts.coverage[source]) for source in sources},
+        "overall": overall, "terms": terms,
     }, indent=2, allow_nan=False))
     jobs = [partial(plot_time_trends, overall, None, output / "overall.png")]
     for category, statements in selections.items():
@@ -861,7 +838,7 @@ def export_run(root):
     groups = {}
     labels = {"LLM": "category"}
     statements = {statement for terms in TERMS.values() for statement in terms}
-    times = TimeEdits(statements)
+    times = TimeCounts(statements)
 
     def consume(record):
         count_statements(record, groups, labels, statements)
@@ -918,7 +895,7 @@ def main():
     output = args.output or (paths or args.annotations)[0].parent / "figures"
     counts, groups, jobs, snapshots = {}, {}, [], []
     labels = {"LLM": "category"}
-    times = TimeEdits(statements, args.heed_root, args.workers)
+    times = TimeCounts(statements, args.heed_root, args.workers)
     keep_pairs = bool(args.config or args.runs)
     cache = output / ".cache" / "analysis.json"
     key = _cache_key(paths, statements, args.examples, keep_pairs, args.heed_root)
