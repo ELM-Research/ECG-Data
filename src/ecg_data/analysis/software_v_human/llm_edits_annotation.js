@@ -22,10 +22,11 @@ annotation = (() => {
     .annotation-box legend { font-size: 12px; color: var(--muted); }
     .annotation-box textarea { width: 100%; resize: vertical; min-height: 80px; padding: 10px; border: 1px solid var(--line); border-radius: 7px; font: inherit; color: var(--ink); }
     .annotation-box textarea:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
-    @media (min-width: 1001px) { .filters { grid-template-columns: minmax(260px, 2fr) repeat(3, 1fr); } }
+    @media (min-width: 1001px) { .filters { grid-template-columns: minmax(260px, 2fr) repeat(2, 1fr); } }
   `;
   document.head.append(style);
   $('source').closest('label').remove();
+  $('category').closest('label').remove();
   $('run').closest('details').remove();
   $('figures').closest('details').remove();
   $('rate-scope').textContent = 'Sample · before search filters';
